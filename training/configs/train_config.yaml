@@ -1,0 +1,14 @@
+base_model: "facebook/opt-1.3b"
+tokenizer_path: "models/tokenizer"
+train_data: "data/processed/kothagpt_sample_dataset_processed.csv"
+output_dir: "models/banglagpt_lora"
+batch_size: 4
+learning_rate: 5e-5
+epochs: 3
+lora:
+  r: 8
+  alpha: 16
+  dropout: 0.05
+  target_modules: ["q_proj", "v_proj"]
+  bias: "none"
+  task_type: "CAUSAL_LM"
