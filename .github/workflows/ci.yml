@@ -138,8 +138,10 @@ jobs:
           .venv/bin/pip install -r services/api/requirements.txt -e packages/python-sdk -e packages/cli
           .venv/bin/pip install ruff fakeredis
           .venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+          .venv/bin/pip install numpy
           pip install -r services/api/requirements.txt -e packages/python-sdk -e packages/cli ruff fakeredis
           pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy
       - name: Run tests
         run: make test
       - name: Tokenize shards (WS-1/2)
