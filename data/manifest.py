@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,8 +20,11 @@ __all__ = [
     "DatasetRegistry",
     "DatasetSource",
     "LicenseAllowlist",
+    "ManifestEntry",
     "get_registry",
+    "load_manifest",
     "load_registry",
+    "register_manifest",
     "save_registry",
 ]
 
@@ -39,8 +43,11 @@ _DEFAULT_ALLOWLIST = frozenset(
         "isc",
         "mpl-2.0",
         "cc-by-nc-nd-4.0",
+        "odc-by",
     }
 )
+
+_VERSION_RE = re.compile(r"\d+(?:\.\d+)+")
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +61,13 @@ class LicenseAllowlist:
             return False
         if normalized in self.blocked:
             return False
-        return normalized in self.allowed or "*" in self.allowed
+        # Version-insensitive matching: "odc-by-1.0" satisfies "odc-by".
+        base = _VERSION_RE.sub("", normalized).rstrip("-")
+        return (
+            normalized in self.allowed
+            or bool(base) and base in self.allowed
+            or "*" in self.allowed
+        )
 
 
 @dataclass
@@ -85,6 +98,56 @@ class DatasetSource:
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class ManifestEntry:
+    """A single validated entry in ``corpora.manifest.json``.
+
+    ``license``/``license_url``/``provenance`` are mandatory so every ingested
+    source carries verifiable provenance metadata (KGPT-003 / issue #8).
+    """
+
+    name: str
+    url: str
+    license: str
+    license_url: str
+    provenance: str
+    content_type: str = "text"
+    notes: str = ""
+    allow_training: bool = True
+    allow_distribution: bool = True
+    collection_date: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("manifest entry missing 'name'")
+        if not self.url:
+            raise ValueError(f"manifest entry {self.name!r} missing 'url'")
+        if not self.license:
+            raise ValueError(f"manifest entry {self.name!r} missing 'license'")
+        if not self.license_url:
+            raise ValueError(f"manifest entry {self.name!r} missing 'license_url'")
+        if not self.provenance:
+            raise ValueError(f"manifest entry {self.name!r} missing 'provenance'")
+        if not self.collection_date:
+            object.__setattr__(
+                self, "collection_date", datetime.now(UTC).isoformat(timespec="seconds")
+            )
+
+    def to_source(self) -> DatasetSource:
+        return DatasetSource(
+            name=self.name,
+            url=self.url,
+            license=self.license,
+            license_url=self.license_url,
+            provenance=self.provenance,
+            collection_date=self.collection_date,
+            content_type=self.content_type,
+            notes=self.notes,
+            allow_training=self.allow_training,
+            allow_distribution=self.allow_distribution,
+        )
 
 
 class DatasetRegistry:
@@ -155,6 +218,103 @@ class DatasetRegistry:
             ok, reason = self.is_allowed(name)
             if not ok:
                 raise ValueError(f"dataset source rejected: {reason}")
+
+
+_MANIFEST_REQUIRED = ("name", "url", "license", "license_url", "provenance")
+
+
+def load_manifest(path: str | Path) -> list[ManifestEntry]:
+    """Load and validate a corpora manifest JSON file.
+
+    Returns a list of :class:`ManifestEntry`. Raises ``ValueError`` when the
+    manifest is missing, malformed, or any entry lacks required provenance /
+    license metadata.
+    """
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"manifest not found: {p}")
+    data = json.loads(p.read_text(encoding="utf-8"))
+    if isinstance(data, dict):
+        data = data.get("datasets", [])
+    if not isinstance(data, list):
+        raise TypeError(f"{p}: manifest must be a JSON list (or {{datasets: [...]}})")
+    entries: list[ManifestEntry] = []
+    for index, raw in enumerate(data):
+        if not isinstance(raw, dict):
+            raise TypeError(f"{p}: entry #{index} is not an object")
+        missing = [k for k in _MANIFEST_REQUIRED if k not in raw or not raw[k]]
+        if missing:
+            raise ValueError(
+                f"{p}: entry #{index} missing required fields: {missing}"
+            )
+        entry = ManifestEntry(
+            name=str(raw["name"]),
+            url=str(raw["url"]),
+            license=str(raw["license"]),
+            license_url=str(raw["license_url"]),
+            provenance=str(raw["provenance"]),
+            content_type=str(raw.get("content_type", "text")),
+            notes=str(raw.get("notes", "")),
+            allow_training=bool(raw.get("allow_training", True)),
+            allow_distribution=bool(raw.get("allow_distribution", True)),
+            collection_date=str(raw.get("collection_date", "")),
+        )
+        entries.append(entry)
+    return entries
+
+
+def register_manifest(
+    registry: DatasetRegistry,
+    manifest_path: str | Path,
+    *,
+    strict: bool = True,
+) -> dict:
+    """Register every manifest source into ``registry``.
+
+    Returns a report dict with ``registered``, ``rejected`` counts and per-entry
+    reasons. Validation is atomic: in strict (production) mode, if any entry is
+    invalid (disallowed license or duplicate name) the whole registration raises
+    and nothing is registered. In development bypass mode (``strict=False``),
+    valid entries are registered and invalid ones are skipped and reported.
+
+    The report is reproducible: the same manifest + registry state yields the
+    same result.
+    """
+    entries = load_manifest(manifest_path)
+    registered: list[str] = []
+    rejected: list[dict[str, str]] = []
+    valid: list[ManifestEntry] = []
+    for entry in entries:
+        # License allowlist check (independent of name registration).
+        if not registry.allowlist.is_allowed(entry.license):
+            rejected.append(
+                {"name": entry.name, "reason": f"license {entry.license!r} not in allowlist"}
+            )
+            continue
+        # Duplicate name check (against registry and against other manifest entries).
+        if registry.get(entry.name) is not None or any(v.name == entry.name for v in valid):
+            rejected.append(
+                {"name": entry.name, "reason": f"source {entry.name!r} already registered"}
+            )
+            continue
+        valid.append(entry)
+
+    if strict and rejected:
+        reasons = "; ".join(f"{r['name']}: {r['reason']}" for r in rejected)
+        raise ValueError(f"manifest entry rejected: {reasons}")
+
+    for entry in valid:
+        registry.register(entry.to_source())
+        registered.append(entry.name)
+
+    return {
+        "manifest": str(Path(manifest_path)),
+        "total": len(entries),
+        "registered": len(registered),
+        "rejected": len(rejected),
+        "registered_sources": registered,
+        "rejected_entries": rejected,
+    }
 
 
 _REGISTRY: DatasetRegistry | None = None

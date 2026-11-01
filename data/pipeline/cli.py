@@ -19,7 +19,9 @@ from data.manifest import (
     DatasetRegistry,
     DatasetSource,
     get_registry,
+    load_manifest,
     load_registry,
+    register_manifest,
     save_registry,
 )
 from data.pipeline import normalize as norm
@@ -134,6 +136,12 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--validation-ratio", type=float, default=0.02)
     run_p.add_argument("--shard-size", type=int, default=100_000)
     run_p.add_argument("--no-gzip", action="store_true")
+    run_p.add_argument(
+        "--dev-bypass",
+        action="store_true",
+        help="permissive development bypass: skip source-provenance checks "
+        "(explicit opt-in; production fails closed by default)",
+    )
 
     norm_p = sub.add_parser("normalize", help="Normalize a text file or stdin.")
     norm_p.add_argument("file", nargs="?", default="-")
@@ -170,6 +178,57 @@ def _build_parser() -> argparse.ArgumentParser:
     sources_add.add_argument("--notes", default="")
     sources_add.add_argument("--no-training", action="store_true")
     sources_add.add_argument("--no-distribution", action="store_true")
+
+    manifest_p = sub.add_parser(
+        "manifest",
+        help="Validate and register the corpora manifest (KGPT-003 / issue #8).",
+    )
+    manifest_sub = manifest_p.add_subparsers(dest="manifest_command", required=True)
+    manifest_validate = manifest_sub.add_parser(
+        "validate", help="Validate the corpora manifest (licenses + provenance)."
+    )
+    manifest_validate.add_argument(
+        "--manifest",
+        default=str(Path(__file__).resolve().parent.parent / "scripts" / "corpora.manifest.json"),
+    )
+    manifest_validate.add_argument(
+        "--registry",
+        default=None,
+        help="registry path for license allowlist checks (default: in-memory registry)",
+    )
+    manifest_validate.add_argument(
+        "--strict",
+        action="store_true",
+        default=True,
+        help="production mode: fail on invalid entries (default on)",
+    )
+    manifest_validate.add_argument(
+        "--no-strict",
+        action="store_true",
+        help="development bypass: report invalid entries instead of failing",
+    )
+    manifest_register = manifest_sub.add_parser(
+        "register", help="Register manifest sources into the provenance registry."
+    )
+    manifest_register.add_argument(
+        "--manifest",
+        default=str(Path(__file__).resolve().parent.parent / "scripts" / "corpora.manifest.json"),
+    )
+    manifest_register.add_argument(
+        "--registry",
+        default="data/processed/registry.json",
+    )
+    manifest_register.add_argument(
+        "--strict",
+        action="store_true",
+        default=True,
+        help="production mode: fail on invalid entries (default on)",
+    )
+    manifest_register.add_argument(
+        "--no-strict",
+        action="store_true",
+        help="development bypass: skip invalid entries instead of failing",
+    )
 
     return parser
 
@@ -264,6 +323,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         validation_ratio=args.validation_ratio,
         shard_size=args.shard_size,
         gzip_output=not args.no_gzip,
+        strict=not args.dev_bypass,
     )
     summary = run_pipeline(cfg)
     print(f"Pipeline complete: {_MAIN}")
@@ -340,6 +400,57 @@ def _cmd_sources(args: argparse.Namespace) -> int:
     raise AssertionError(f"unhandled sources command {args.sources_command}")
 
 
+def _cmd_manifest(args: argparse.Namespace) -> int:
+    if args.manifest_command == "validate":
+        strict = args.strict and not args.no_strict
+        try:
+            entries = load_manifest(args.manifest)
+        except (FileNotFoundError, TypeError, ValueError) as exc:
+            print(f"manifest validation failed: {exc}", file=sys.stderr)
+            return 1
+        reg = load_registry(args.registry) if args.registry else DatasetRegistry()
+        valid = 0
+        invalid: list[dict[str, str]] = []
+        for entry in entries:
+            reasons: list[str] = []
+            if not reg.allowlist.is_allowed(entry.license):
+                reasons.append(f"license {entry.license!r} not in allowlist")
+            if reg.get(entry.name) is not None:
+                reasons.append(f"source {entry.name!r} already registered")
+            if reasons:
+                invalid.append({"name": entry.name, "reason": "; ".join(reasons)})
+            else:
+                valid += 1
+        print(f"Manifest: {args.manifest}")
+        print(f"  total entries: {len(entries)}")
+        print(f"  valid: {valid}")
+        print(f"  invalid: {len(invalid)}")
+        for item in invalid:
+            print(f"  - {item['name']}: {item['reason']}")
+        if invalid and strict:
+            print("manifest validation FAILED (strict/production mode)", file=sys.stderr)
+            return 1
+        print("manifest validation OK")
+        return 0
+
+    if args.manifest_command == "register":
+        strict = args.strict and not args.no_strict
+        reg = load_registry(args.registry) if args.registry else DatasetRegistry()
+        try:
+            report = register_manifest(reg, args.manifest, strict=strict)
+        except (FileNotFoundError, TypeError, ValueError) as exc:
+            print(f"manifest registration failed: {exc}", file=sys.stderr)
+            return 1
+        out = save_registry(reg, args.registry)
+        print(f"Registered {report['registered']}/{report['total']} source(s) -> {out}")
+        print(f"  rejected: {report['rejected']}")
+        for item in report["rejected_entries"]:
+            print(f"  - {item['name']}: {item['reason']}")
+        return 0
+
+    raise AssertionError(f"unhandled manifest command {args.manifest_command}")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "run":
@@ -352,6 +463,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_version(args)
     if args.command == "sources":
         return _cmd_sources(args)
+    if args.command == "manifest":
+        return _cmd_manifest(args)
     raise AssertionError(f"unhandled command {args.command}")
 
 

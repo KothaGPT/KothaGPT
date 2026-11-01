@@ -6,7 +6,7 @@ import gzip
 import json
 
 from data.pipeline import dedup, io, normalize, quality, split
-from data.pipeline.config import PipelineConfig, run_pipeline
+from data.pipeline.config import PipelineConfig, enforce_source_provenance, run_pipeline
 
 
 def _read_shard_text(path) -> str:
@@ -95,6 +95,7 @@ def test_full_pipeline_pii_mask_mode_keeps_doc(tmp_path):
         min_words=1,
         require_bangla=False,
         pii_mode="mask",
+        strict=False,  # dev bypass: no registry configured in this test
     )
     summary = run_pipeline(cfg)
     assert summary["raw"] == 2
@@ -239,6 +240,7 @@ def test_full_pipeline(tmp_path):
         dedup_exact=True,
         validation_ratio=0.1,
         shard_size=100,
+        strict=False,  # dev bypass: no registry configured in this test
     )
     summary = run_pipeline(cfg)
 
@@ -253,3 +255,62 @@ def test_full_pipeline(tmp_path):
     data = json.loads(manifest.read_text(encoding="utf-8"))
     assert data["version_id"] == summary["version_id"]
     assert (out_root / summary["version_id"] / "report" / "REPORT.md").exists()
+
+
+def _registry_with(source_name: str = "wiki", license_id: str = "cc-by-sa-4.0"):
+    from data.manifest import DatasetRegistry, DatasetSource
+
+    reg = DatasetRegistry()
+    reg.register(
+        DatasetSource(
+            name=source_name,
+            url=f"https://example.com/{source_name}",
+            license=license_id,
+            provenance="test",
+        )
+    )
+    return reg
+
+
+def _records() -> list[dict]:
+    return [
+        {"id": "1", "text": "বাংলা ভাষা।", "source": "wiki"},
+        {"id": "2", "text": "more bangla text।", "source": "wiki"},
+        {"id": "3", "text": "unregistered source text।", "source": "unregistered"},
+        {"id": "4", "text": "no source field here।"},
+    ]
+
+
+def test_enforce_source_provenance_strict_empty_registry_rejects_all():
+    kept, rejected = enforce_source_provenance(_records(), strict=True)
+    assert kept == []
+    assert len(rejected) == 4
+    assert all("no sources registered" in r for r in rejected)
+
+
+def test_enforce_source_provenance_strict_unregistered_source_rejected():
+    reg = _registry_with()
+    kept, rejected = enforce_source_provenance(_records(), registry=reg, strict=True)
+    kept_ids = {r["id"] for r in kept}
+    assert kept_ids == {"1", "2"}
+    assert any("unregistered" in r for r in rejected)
+    assert any("missing 'source' field" in r for r in rejected)
+
+
+def test_enforce_source_provenance_strict_disallowed_license_rejected():
+    reg = _registry_with(license_id="all-rights-reserved")
+    kept, rejected = enforce_source_provenance(_records()[:2], registry=reg, strict=True)
+    assert kept == []
+    assert all("not in the allowlist" in r for r in rejected)
+
+
+def test_enforce_source_provenance_dev_bypass_allows_all():
+    kept, rejected = enforce_source_provenance(_records(), strict=False)
+    assert kept == _records()
+    assert rejected == []
+
+
+def test_enforce_source_provenance_dev_bypass_empty_registry_allows_all():
+    kept, rejected = enforce_source_provenance(_records(), registry=_registry_with(), strict=False)
+    assert kept == _records()
+    assert rejected == []

@@ -83,6 +83,12 @@ class PipelineConfig:
     shard_size: int = 100_000
     gzip_output: bool = True
 
+    # Provenance / source registry
+    strict: bool = True
+    """Production mode (default): fail closed when the source registry is empty,
+    a record's source is unregistered, or a license is missing/disallowed.
+    Set ``strict=False`` to opt into the permissive development bypass."""
+
     # Reporting
     sample_note: str | None = None
 
@@ -91,22 +97,41 @@ class PipelineConfig:
 
 
 def enforce_source_provenance(
-    records: list[dict], registry: DatasetRegistry | None = None
+    records: list[dict],
+    registry: DatasetRegistry | None = None,
+    *,
+    strict: bool = True,
 ) -> tuple[list[dict], list[str]]:
     """Filter records to those whose ``source`` is registered and allowed.
 
-    Returns ``(kept, rejected_reasons)``. Records without a ``source`` field
-    are rejected unless the registry is empty (development mode).
+    Returns ``(kept, rejected_reasons)``.
+
+    Production mode (``strict=True``, the default) fails closed:
+      * an empty registry rejects every record (provenance required);
+      * a record without a ``source`` field is rejected;
+      * an unregistered or disallowed source is rejected.
+
+    Development bypass (``strict=False``) is an explicit opt-in: every record is
+    allowed through with no provenance check, regardless of registry state.
     """
     registry = registry or get_registry()
-    if not registry.list():
+    if not strict:
+        # Explicit development bypass: allow all records, no provenance check.
         return records, []
+    if not registry.list():
+        rejected = [
+            f"{r.get('id', '?')}: no sources registered (provenance required in production mode)"
+            for r in records
+        ]
+        return [], rejected
     kept: list[dict] = []
     rejected: list[str] = []
     for record in records:
         source = record.get("source")
         if not source:
-            rejected.append("record missing 'source' field (no provenance)")
+            rejected.append(
+                f"{record.get('id', '?')}: record missing 'source' field (no provenance)"
+            )
             continue
         ok, reason = registry.is_allowed(source)
         if not ok:
@@ -136,14 +161,18 @@ def run_pipeline(cfg: PipelineConfig, registry: DatasetRegistry | None = None) -
     )
 
     # 0. Provenance gate (KGPT-003): reject records whose source is not
-    # registered and allowed. When no registry is configured, this is a no-op.
+    # registered and allowed. Production mode (strict=True, the default) fails
+    # closed when the registry is empty or a source is unregistered/disallowed;
+    # strict=False is an explicit development bypass.
     registry = registry or get_registry()
     provenance_rejected: list[str] = []
 
     # 1. Read raw records.
     records = list(io.iter_records(source))
     summary["raw"] = len(records)
-    records, provenance_rejected = enforce_source_provenance(records, registry)
+    records, provenance_rejected = enforce_source_provenance(
+        records, registry, strict=cfg.strict
+    )
     summary["after_provenance"] = len(records)
     summary["provenance_rejected"] = provenance_rejected
 

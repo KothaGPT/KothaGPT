@@ -102,6 +102,7 @@ def test_full_pipeline_drops_toxic(tmp_path):
         min_words=1,
         require_bangla=False,
         check_toxic=True,
+        strict=False,  # dev bypass: no source registry configured in this test
     )
     summary = run_pipeline(cfg)
     assert summary["raw"] == 2
@@ -122,6 +123,7 @@ def test_full_pipeline_no_toxic_check_keeps_all(tmp_path):
         min_words=1,
         require_bangla=False,
         check_toxic=False,
+        strict=False,  # dev bypass: no source registry configured in this test
     )
     summary = run_pipeline(cfg)
     assert summary["after_toxic"] == 2

@@ -135,6 +135,7 @@ def test_dedup_counts_reported(tmp_path):
         max_chars=10**6,
         min_words=1,
         require_bangla=False,
+        strict=False,  # dev bypass: no source registry configured in this test
     )
     summary = run_pipeline(cfg)
     assert summary["dedup"]["removed_exact"] == 1
@@ -155,6 +156,7 @@ def test_cross_source_dedup_via_pipeline(tmp_path):
         min_words=1,
         require_bangla=False,
         dedup_state_path=str(state),
+        strict=False,  # dev bypass: no source registry configured in this test
     )
     summary_a = run_pipeline(cfg_a)
     assert summary_a["after_dedup"] == 1
@@ -171,6 +173,7 @@ def test_cross_source_dedup_via_pipeline(tmp_path):
         min_words=1,
         require_bangla=False,
         dedup_state_path=str(state),
+        strict=False,  # dev bypass: no source registry configured in this test
     )
     summary_b = run_pipeline(cfg_b)
     assert summary_b["after_dedup"] == 1  # duplicate from source A dropped

@@ -112,6 +112,7 @@ def test_full_pipeline_with_license_gate(tmp_path):
         require_bangla=False,
         require_license=True,
         license_map_path=str(license_map),
+        strict=False,  # dev bypass: no source registry configured in this test
     )
     summary = run_pipeline(cfg)
 
@@ -135,6 +136,7 @@ def test_full_pipeline_without_license_gate_keeps_all(tmp_path):
         min_words=1,
         require_bangla=False,
         require_license=False,
+        strict=False,  # dev bypass: no source registry configured in this test
     )
     summary = run_pipeline(cfg)
     assert summary["raw"] == 2
