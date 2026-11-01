@@ -75,7 +75,7 @@ def test_load_config_derives_vocab_size(tmp_path: Path) -> None:
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(
         f"model:\n  hidden_size: 64\n  num_layers: 2\n  num_heads: 4\n"
-        f"training:\n  max_steps: 5\n"
+        f"training:\n  max_steps: 5\n  warmup_steps: 1\n"
         f"data:\n  tokenizer_path: {tok}\n",
         encoding="utf-8",
     )

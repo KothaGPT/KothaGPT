@@ -19,6 +19,8 @@ class ModelConfig:
     max_position_embeddings: int = 4096
     rms_norm_eps: float = 1e-5
     rope_theta: float = 10000.0
+    rope_scaling: str | None = None
+    rope_scaling_factor: float = 1.0
     tie_word_embeddings: bool = True
     norm_type: str = "rmsnorm"
     architecture: str = "decoder_transformer"
@@ -50,6 +52,12 @@ class ModelConfig:
             raise ValueError(f"norm_type {self.norm_type} not supported")
         if self.architecture != "decoder_transformer":
             raise ValueError(f"architecture {self.architecture} not supported")
+        if self.rope_theta <= 0:
+            raise ValueError("rope_theta must be positive")
+        if self.rope_scaling is not None and self.rope_scaling not in ("linear", "ntk"):
+            raise ValueError(f"rope_scaling {self.rope_scaling} not supported")
+        if self.rope_scaling is not None and self.rope_scaling_factor <= 1.0:
+            raise ValueError("rope_scaling_factor must be > 1.0 when rope_scaling is set")
 
 
 @dataclass
@@ -87,6 +95,17 @@ class TrainingConfig:
             raise ValueError("max_steps must be positive")
         if self.mixed_precision not in ("none", "bf16", "fp16"):
             raise ValueError(f"mixed_precision {self.mixed_precision} not supported")
+        if self.min_lr is not None:
+            if self.min_lr < 0:
+                raise ValueError("min_lr must be non-negative")
+            if self.min_lr >= self.learning_rate:
+                raise ValueError("min_lr must be below learning_rate")
+        if self.lr_schedule not in ("cosine", "linear"):
+            raise ValueError(f"lr_schedule {self.lr_schedule} not supported")
+        if self.warmup_steps < 0:
+            raise ValueError("warmup_steps must be non-negative")
+        if self.warmup_steps > self.max_steps:
+            raise ValueError("warmup_steps must not exceed max_steps")
 
     def to_dict(self) -> dict:
         return asdict(self)

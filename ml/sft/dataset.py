@@ -153,7 +153,6 @@ class SFTDataset(InstructionDataset):
                 raise ValueError(f"record {index} has no completion tokens after truncation")
         ids = (prompt_ids + completion_ids)[: self.max_length]
         prompt_len = min(len(prompt_ids), len(ids))
-        # Ensure at least one non-masked label
         if prompt_len >= len(ids):
             # No completion fit, skip by truncating prompt further
             if len(prompt_ids) > 0 and len(completion_ids) > 0:
@@ -164,7 +163,13 @@ class SFTDataset(InstructionDataset):
                 raise ValueError(
                     f"record {index} prompt consumes full max_length, no completion target"
                 )
-        labels = [-100] * prompt_len + ids[prompt_len:]
+        # Causal LM: at position i the model predicts ids[i+1]. Supervise the
+        # completion, starting from the last prompt token (prompt->completion
+        # transition) so the model learns to begin generating the answer.
+        labels = [-100] * len(ids)
+        start = max(prompt_len - 1, 0)
+        if start < len(ids) - 1:
+            labels[start:-1] = ids[start + 1 :]
         if all(l == -100 for l in labels):
             raise ValueError(f"record {index} has no supervised completion tokens")
         return {"input_ids": ids, "labels": labels, "record": record}

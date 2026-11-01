@@ -11,16 +11,31 @@ except ImportError:
 router = APIRouter(prefix="/v1/models", tags=["models"])
 
 
+# Production-ready model families exposed via /v1/models, in canonical order.
+# Tiered (nano/medium/large) and research (moe) models are registered but not
+# surfaced here.
+_AVAILABLE_FAMILIES = ["kothagpt", "kothagpt-small", "kothagpt-embed", "kothagpt-rerank"]
+
+
 @router.get("", response_model=ModelList)
 def list_models() -> ModelList:
-    # Prefer registry when available (WS-9), fallback to backend mock for CI
+    from ..schemas import Model as APIModel
+
+    # Prefer registry if available (WS-9), fallback to backend mock for CI
     if get_registry is not None:
         try:
-            from ..schemas import Model as APIModel
-
-            regs = get_registry().list_models()
-            if regs:
-                return ModelList(data=[APIModel(id=r.id, description=r.name, context_window=r.context_window) for r in regs])
+            regs = {r.id: r for r in get_registry().list_models()}
+            data = []
+            for family in _AVAILABLE_FAMILIES:
+                rec = regs.get(family)
+                if rec is not None and rec.status != "research":
+                    data.append(
+                        APIModel(
+                            id=rec.id, description=rec.name, context_window=rec.context_window
+                        )
+                    )
+            if data:
+                return ModelList(data=data)
         except Exception:
             pass
     backend = backend_factory.create()
