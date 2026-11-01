@@ -101,9 +101,14 @@ frontier-quality models at reduced compute cost.
 **Phase A — Architecture research**
 - Implement `ml/models/moe/` package:
   - `SparseMoELayer`: top-k gating (k=2), load-balanced expert routing
-  - `ExpertFFN`: SwiGLU expert with shared expert fallback
+  - `ExpertFFN`: SwiGLU expert
   - `MoEBlock`: transformer block with MoE FFN replacing dense FFN
-  - `Router`: softmax gating with capacity factor, expert-choice routing
+  - `Router`: differentiable softmax top-k gating and auxiliary load-balancing loss
+- Core router, expert, sparse layer, and transformer block are implemented in
+  `ml/models/moe/`; forward/backward coverage is in
+  `tests/test_moe_router.py` and `tests/test_moe_layer.py`.
+- Capacity enforcement, shared-expert fallback, expert-choice routing, and
+  dense-vs-MoE quality/compute comparisons remain research work.
 - Compare dense vs MoE at fixed parameter budget (e.g., 7B dense vs 7B MoE with 8 experts)
 - Deliverables: `moe/layer.py`, `moe/router.py`, `moe/block.py`, `moe/decision.md`
 

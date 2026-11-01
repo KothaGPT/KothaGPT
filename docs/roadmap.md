@@ -93,7 +93,7 @@ Master checklist (auto-verified coverage): `docs/checklist.md`
 
 ## Phase 10.5 — Production Model Family (`docs/production-model-plan.md`)
 - [ ] Kotha Nano / Small / Medium / Large tiering (`ml/configs/nano.yaml`, `medium.yaml`, `large.yaml`, `ml/models/tier.py`)
-- [ ] MoE research track for frontier efficiency (`ml/models/moe/`, `ml/configs/moe.yaml`, `ml/inference/moe_engine.py`)
+- [ ] MoE research track for frontier efficiency (top-k router, SwiGLU experts, and MoE transformer block implemented; training/inference optimization remains)
 - [ ] Strong reasoning stack (`ml/configs/sft-reasoning.yaml`, `ml/sft/reasoning.py`, `ml/models/reasoning_head.py`)
 - [ ] Strong coding stack (`ml/configs/sft-coding.yaml`, `ml/sft/coding.py`, coding token extensions)
 - [ ] Advanced multimodal pipelines (`ml/models/multimodal/`, `ml/configs/mm-vision.yaml`, `mm-unified.yaml`)
