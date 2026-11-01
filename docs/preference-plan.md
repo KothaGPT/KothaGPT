@@ -32,7 +32,7 @@ Guiding principles:
 | Preference package | `ml/preference/` — `dataset.py` (`PreferenceRecord`, `load_preference_jsonl`, `split_preference`), `reward.py` (`RewardModel` head on frozen `KothaGPT`), `trainer.py` (`run_dpo`), `cli.py` (`make preference-smoke` green) | real-model RM/DPO baselines, CI gate |
 | Trainer core | `ml/trainer/` loop, checkpoint (atomic/resume), scheduler, monitor, DDP/FSDP, mixed precision | only causal-LM + SFT loss paths; no reward / DPO objectives |
 | Data pipeline | `data/pipeline/` gates + `data/pipeline/schema.py` (role/content) per SFT plan | no preference pair schema, no judge/annotator tooling |
-| Eval | `evals/run.py` + Bangla v1, WS-4 `preference.yaml`, WS-5 `hallucination.yaml` (with `semantic_entailment`/`semantic_contradiction`), WS-6 `safety.yaml`, WS-9 `refusal.yaml`; `evals/metrics.py` gains `preference_judge`, `refusal_classifier`, `semantic_entailment`, `semantic_contradiction` | real-model baselines, WS-7 helpfulness, WS-8 bangla-quality suites, RM-guided win-rate replacing rule-based judge |
+| Eval | `evals/run.py` + Bangla v1, WS-4 `preference.yaml`, WS-5 `hallucination.yaml`, WS-6 `safety.yaml`, WS-7 `helpfulness.yaml`, WS-8 `bangla-quality.yaml`, WS-9 `refusal.yaml`; deterministic metrics and controls for each suite | real-model baselines, deeper linguistic quality signals, RM-guided win-rate replacing rule-based judge |
 | Configs | `ml/configs/small.yaml`, `sft*.yaml` | no reward/dpo configs |
 
 ---
@@ -146,6 +146,14 @@ Goal: alignment must not trade safety for uselessness.
 - Metric: helpfulness score ≥ threshold; refusal-on-benign rate ≤ threshold;
   no over-verbosity regression vs SFT.
 
+Implemented: `helpfulness_metrics` reports answerability,
+reference-token information sufficiency, verbosity fit, and non-refusal, with
+a composite score. `evals/suites/helpfulness.yaml` exercises useful answers,
+calibrated uncertainty, non-answers, and irrelevant responses through the
+`helpfulness` control (helpful score threshold: 0.75);
+`make eval-helpfulness` writes the suite report. These deterministic lexical
+signals are calibration baselines, not RM or human judgments.
+
 ### WS-8 — Bengali quality evaluation (`evals/suites/bangla-quality.yaml`)
 
 Goal: guarantee alignment improves — never damages — Bangla language quality.
@@ -157,6 +165,14 @@ Goal: guarantee alignment improves — never damages — Bangla language quality
 - Deliverables: `evals/suites/bangla-quality.yaml` + report.
 - Metric: Bengali quality metrics ≥ SFT base and ≥ documented thresholds;
   tokenizer unk rate and decode fidelity stay at 0%/100%.
+
+Implemented: `bangla_quality_metrics` reports Bengali-script ratio, Bengali
+language classification, ROUGE-L reference similarity, and a composite score.
+`evals/suites/bangla-quality.yaml` checks Bengali and romanized/English
+responses through the `bangla_quality` control; `make eval-bangla-quality`
+writes the report (quality score threshold: 0.70). Grammar, register,
+transliteration fidelity, tokenizer efficiency, and aligned-vs-SFT comparisons
+remain future work. These deterministic metrics do not evaluate those areas.
 
 ### WS-9 — Refusal behavior evaluation (`evals/suites/refusal.yaml`)
 
@@ -213,6 +229,7 @@ make eval-safety                                                 # WS-6
 make eval-helpfulness                                            # WS-7
 make eval-bangla-quality                                         # WS-8
 make eval-refusal                                                # WS-9
+make eval-alignment                                              # WS-4..WS-9
 ```
 
 Never commit model weights or preference shards; `ml/preference/artifacts/` and

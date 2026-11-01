@@ -26,6 +26,8 @@ __all__ = [
     "semantic_contradiction",
     "preference_judge",
     "refusal_classifier",
+    "helpfulness_metrics",
+    "bangla_quality_metrics",
 ]
 
 _BENGALI_RANGES = ((0x0980, 0x09FF), (0x0964, 0x0965))
@@ -296,3 +298,62 @@ def refusal_classifier(text: str) -> str:
     if any(sig in lowered for sig in _PARTIAL_SIGNALS):
         return "partial"
     return "refuse"
+
+
+def helpfulness_metrics(
+    response: str, reference: str = "", expected_tokens: int | None = None
+) -> dict[str, float]:
+    """Return deterministic helpfulness proxies, not a human preference judgment.
+
+    Reference coverage and verbosity fit are lexical baselines. When neither a
+    reference nor an expected length is available, the aggregate uses only
+    answerability and non-refusal.
+    """
+    response_tokens = _lexical_tokens(response)
+    reference_tokens = _lexical_tokens(reference)
+    answerability = float(bool(response_tokens))
+    non_refusal = float(refusal_classifier(response) == "answer")
+    information_sufficiency = context_token_coverage(reference, response)
+
+    target_length = expected_tokens or len(reference_tokens)
+    verbosity_fit = (
+        min(len(response_tokens), target_length) / max(len(response_tokens), target_length)
+        if target_length > 0 and response_tokens
+        else 0.0
+    )
+    components = [answerability, non_refusal]
+    if reference_tokens:
+        components.extend((information_sufficiency, verbosity_fit))
+    elif expected_tokens:
+        components.append(verbosity_fit)
+
+    return {
+        "answerability": answerability,
+        "information_sufficiency": information_sufficiency,
+        "verbosity_fit": verbosity_fit,
+        "non_refusal": non_refusal,
+        "helpfulness_score": statistics.mean(components),
+    }
+
+
+def bangla_quality_metrics(response: str, reference: str = "") -> dict[str, float]:
+    """Return script, language, and reference-similarity proxies for Bangla.
+
+    These deterministic signals do not assess grammar, register, or
+    transliteration fidelity; those require dedicated linguistic evaluation.
+    """
+    script_ratio = bengali_script_ratio(response)
+    language_correct = float(
+        bool(_lexical_tokens(response)) and language_detection(response) == "bn"
+    )
+    reference_similarity = rouge(response, reference)["rougeL"] if reference else 0.0
+    components = [script_ratio, language_correct]
+    if reference:
+        components.append(reference_similarity)
+
+    return {
+        "bengali_script_ratio": script_ratio,
+        "language_correct": language_correct,
+        "reference_similarity": reference_similarity,
+        "bangla_quality_score": statistics.mean(components),
+    }

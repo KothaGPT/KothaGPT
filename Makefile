@@ -163,6 +163,18 @@ eval-preference: | $(VENV)
 		--suite evals/suites/preference.yaml \
 		--name preference
 
+# WS-7 — Helpfulness baseline on answerability, reference coverage, and length fit.
+eval-helpfulness: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/helpfulness.yaml \
+		--name helpfulness
+
+# WS-8 — Bangla script and reference-similarity quality baseline.
+eval-bangla-quality: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/bangla-quality.yaml \
+		--name bangla-quality
+
 # WS-5 — Semantic consistency (lexical NLI proxy) on grounded QA.
 eval-semantic: | $(VENV)
 	$(PYTHON) -m evals.run \
@@ -187,6 +199,8 @@ eval-alignment: | $(VENV)
 	$(MAKE) eval-preference
 	$(MAKE) eval-hallucination
 	$(MAKE) eval-safety
+	$(MAKE) eval-helpfulness
+	$(MAKE) eval-bangla-quality
 	$(MAKE) eval-refusal
 
 # Instruction tuning: validate records and run completion-only SFT.
