@@ -123,7 +123,7 @@ ci-data-build: | $(VENV)
 		--out-root data/processed \
 		--version-label ci-smoke \
 		--min-chars 1 --max-chars 1000000 --min-words 1 \
-		--no-gzip
+		--no-gzip --dev-bypass
 
 ci-tokenizer-build: | $(VENV)
 	$(PYTHON) -m ml.tokenizer.cli train \
