@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
+
+_ALLOWED_QUANT_LEVELS = {"none", "int8", "int4", "bf16"}
+_ALLOWED_STATUSES = {"ready", "research", "deprecated", "offline"}
 
 
 @dataclass
@@ -25,6 +28,12 @@ class ModelRecord:
     def __post_init__(self):
         if not self.created_at:
             self.created_at = datetime.now(timezone.utc).isoformat()
+        if not self.id or not self.name:
+            raise ValueError("model id and name are required")
+        if self.quant_level not in _ALLOWED_QUANT_LEVELS:
+            raise ValueError(f"unsupported quant_level {self.quant_level!r}")
+        if self.status not in _ALLOWED_STATUSES:
+            raise ValueError(f"unsupported status {self.status!r}")
 
 
 class ModelRegistry:
@@ -105,6 +114,7 @@ class ModelRegistry:
         return next((m for m in self.list_models() if m.id == model_id), None)
 
     def register(self, rec: ModelRecord) -> ModelRecord:
+        rec = ModelRecord(**asdict(rec)) if isinstance(rec, ModelRecord) else ModelRecord(**rec)
         if self.url:
             import json
             from sqlalchemy import MetaData, Table, Column, String, create_engine, text

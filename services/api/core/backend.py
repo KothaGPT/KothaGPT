@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from collections.abc import AsyncIterator, Iterator
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from .config import normalize_backend_name
 
 if TYPE_CHECKING:
     from ..api.schemas import (
@@ -20,6 +24,30 @@ if TYPE_CHECKING:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class BackendCapabilities:
+    """The supported surface area exposed by a backend implementation."""
+
+    chat: bool = True
+    streaming: bool = True
+    embeddings: bool = True
+    rerank: bool = True
+    tools: bool = True
+    agents: bool = True
+    websocket: bool = True
+
+    def as_dict(self) -> dict[str, bool]:
+        return {
+            "chat": self.chat,
+            "streaming": self.streaming,
+            "embeddings": self.embeddings,
+            "rerank": self.rerank,
+            "tools": self.tools,
+            "agents": self.agents,
+            "websocket": self.websocket,
+        }
+
+
 class Backend(ABC):
     """Interface implemented by inference/agent backends.
 
@@ -27,6 +55,11 @@ class Backend(ABC):
     model runtime and an agent orchestrator); the default mock backend lets the
     whole API surface be exercised without any model weights.
     """
+
+    capabilities: BackendCapabilities = BackendCapabilities()
+
+    def get_capabilities(self) -> BackendCapabilities:
+        return self.capabilities
 
     @abstractmethod
     def list_models(self) -> list[Model]: ...
@@ -81,12 +114,15 @@ class BackendFactory:
         self._instances: dict[str, Backend] = {}
 
     def register(self, name: str, backend: type[Backend]) -> None:
-        self._registered[name] = backend
+        normalized = normalize_backend_name(name)
+        if not isinstance(backend, type) or not issubclass(backend, Backend):
+            raise TypeError(
+                f"Backend registration for {normalized!r} must be a Backend subclass"
+            )
+        self._registered[normalized] = backend
 
     def create(self, name: str | None = None) -> Backend:
-        import os
-
-        chosen = name or os.getenv("KOTHAGPT_BACKEND", "mock")
+        chosen = normalize_backend_name(name)
         if chosen not in self._registered:
             raise ValueError(f"Unknown backend {chosen!r}; registered: {sorted(self._registered)}")
         # Backends are shared singletons per process so in-memory state
@@ -94,3 +130,18 @@ class BackendFactory:
         if chosen not in self._instances:
             self._instances[chosen] = self._registered[chosen]()
         return self._instances[chosen]
+
+    def list(self) -> list[str]:
+        return sorted(self._registered)
+
+    def describe(self, name: str | None = None) -> dict[str, dict[str, bool]]:
+        """Expose the supported feature matrix without instantiating heavy backends."""
+        if name is None:
+            return OrderedDict(
+                (registered_name, self._registered[registered_name].capabilities.as_dict())
+                for registered_name in sorted(self._registered)
+            )
+        normalized = normalize_backend_name(name)
+        if normalized not in self._registered:
+            raise ValueError(f"Unknown backend {normalized!r}; registered: {sorted(self._registered)}")
+        return {normalized: self._registered[normalized].capabilities.as_dict()}

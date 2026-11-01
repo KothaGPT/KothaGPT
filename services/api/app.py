@@ -10,12 +10,15 @@ from .api.routers import (
     ws_router,
 )
 from .core import backend_factory
+from .core.engine_backend import EngineBackend
 from .core.example_backend import CannedBackend, HFExampleBackend
 from .core.mock_backend import MockBackend
 
 backend_factory.register("mock", MockBackend)
 backend_factory.register("canned", CannedBackend)
 backend_factory.register("hf", HFExampleBackend)
+backend_factory.register("engine", EngineBackend)
+backend_factory.register("real", EngineBackend)
 
 app = FastAPI(
     title="Kotha GPT API",

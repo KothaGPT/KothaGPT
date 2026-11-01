@@ -14,7 +14,7 @@ bootstrap:
 dev: | $(VENV)
 	$(PYTHON) -m uvicorn services.api.app:app --reload --host 0.0.0.0 --port 8000
 
-.PHONY: bootstrap-check
+.PHONY: bootstrap-check doctor
 
 bootstrap-check: | $(VENV)
 	bash -n scripts/bootstrap.sh scripts/lib/bootstrap_common.sh \
@@ -29,6 +29,9 @@ bootstrap-check: | $(VENV)
 	./scripts/bootstrap.sh --dry-run --platform macos
 	./scripts/bootstrap.sh --dry-run --platform windows
 	$(PYTHON) -m pytest tests/test_bootstrap.py
+
+doctor: | $(VENV)
+	$(PYTHON) -m scripts.doctor
 
 data: | $(VENV)
 	$(PYTHON) -m data.pipeline.cli run

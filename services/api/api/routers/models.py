@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from ...core import backend_factory
-from ..schemas import ModelList
+from ..schemas import BackendList, ModelList
 
 try:
     from ml.inference.registry import get_registry
@@ -31,7 +31,10 @@ def list_models() -> ModelList:
                 if rec is not None and rec.status != "research":
                     data.append(
                         APIModel(
-                            id=rec.id, description=rec.name, context_window=rec.context_window
+                            id=rec.id,
+                            description=rec.name,
+                            context_window=rec.context_window,
+                            status=rec.status,
                         )
                     )
             if data:
@@ -40,3 +43,11 @@ def list_models() -> ModelList:
             pass
     backend = backend_factory.create()
     return ModelList(data=backend.list_models())
+
+
+@router.get("/backends", response_model=BackendList)
+def list_backends() -> BackendList:
+    data = []
+    for name, caps in backend_factory.describe().items():
+        data.append({"name": name, "capabilities": caps})
+    return BackendList(data=data)

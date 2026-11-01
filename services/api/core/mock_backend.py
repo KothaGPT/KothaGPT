@@ -30,7 +30,7 @@ from ..api.schemas import (
     Usage,
 )
 from .agent_store import AgentStore, StoredMapping, create_store_from_env
-from .backend import Backend
+from .backend import Backend, BackendCapabilities
 
 _EMBEDDING_DIM = 256
 
@@ -39,21 +39,25 @@ _MODELS = [
         id="kothagpt",
         description="General-purpose Bangla chat model.",
         context_window=8192,
+        status="ready",
     ),
     Model(
         id="kothagpt-small",
         description="Fast Bangla chat model for latency-sensitive apps.",
         context_window=4096,
+        status="ready",
     ),
     Model(
         id="kothagpt-embed",
         description="Bangla text embedding model.",
         context_window=2048,
+        status="ready",
     ),
     Model(
         id="kothagpt-rerank",
         description="Bangla query/document reranking model.",
         context_window=2048,
+        status="ready",
     ),
 ]
 
@@ -104,6 +108,16 @@ class MockBackend(Backend):
     Redis/PostgreSQL when ``REDIS_URL``/``DATABASE_URL`` is configured so state
     survives instance restarts on ephemeral hosts (e.g. Vercel functions).
     """
+
+    capabilities = BackendCapabilities(
+        chat=True,
+        streaming=True,
+        embeddings=True,
+        rerank=True,
+        tools=True,
+        agents=True,
+        websocket=True,
+    )
 
     def __init__(self, store: AgentStore | None = None) -> None:
         store = store or create_store_from_env()
