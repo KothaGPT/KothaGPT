@@ -96,7 +96,7 @@ Master checklist (auto-verified coverage): `docs/checklist.md`
 - [ ] MoE research track for frontier efficiency (top-k router, SwiGLU experts, and MoE transformer block implemented; training/inference optimization remains)
 - [ ] Strong reasoning stack (`ml/configs/sft-reasoning.yaml`, `ml/sft/reasoning.py`, `ml/models/reasoning_head.py`)
 - [ ] Strong coding stack (`ml/configs/sft-coding.yaml`, `ml/sft/coding.py`, coding token extensions)
-- [ ] Advanced multimodal pipelines (`ml/models/multimodal/`, `ml/configs/mm-vision.yaml`, `mm-unified.yaml`)
+- [ ] Advanced multimodal pipelines (baseline vision/audio/document encoders and unified decoder integration implemented; pretrained backbones, OCR/data pipelines, and modality-aware generation remain)
 - [ ] Model routing system (`ml/inference/router.py`, `services/api/router.py`, `ml/inference/router_config.yaml`)
 - [x] Tier-specific and adversarial evaluation runners with release gates (`evals/tier_gate.py`, `evals/adversarial.py`, `evals/redteam.py`)
 - [ ] Tier-specific quality gates pass on reviewed model baselines; adversarial success rate < 5%; routing cost/performance ≥ 30% improvement

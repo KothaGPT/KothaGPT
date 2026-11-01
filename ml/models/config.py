@@ -23,6 +23,10 @@ class ModelConfig:
     tie_word_embeddings: bool = True
     norm_type: str = "rmsnorm"
     architecture: str = "decoder_transformer"
+    mm_hidden: int = 0
+    vision_encoder: bool = False
+    audio_encoder: bool = False
+    document_encoder: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -45,6 +49,8 @@ class ModelConfig:
             )
         if self.vocab_size <= 0:
             raise ValueError("vocab_size must be positive")
+        if self.mm_hidden < 0:
+            raise ValueError("mm_hidden must be non-negative")
         if self.max_position_embeddings <= 0:
             raise ValueError("max_position_embeddings must be positive")
         if self.norm_type not in ("rmsnorm", "layernorm"):

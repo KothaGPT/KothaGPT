@@ -187,14 +187,20 @@ encoder paths with unified decoder, enabling rich multimodal inputs.
 
 #### Architecture
 
-- **Vision encoder**: frozen ViT (or CLIP-style) encoder projecting
-  image patches into the model's hidden space; `mm_hidden` config field
-  controls the projection dimension
-- **Audio encoder**: frozen audio encoder (Whisper-style or HuBERT)
-  projecting audio features into hidden space
-- **Document encoder**: OCR + layout-aware encoder for document understanding
-- **Unified decoder**: existing KothaGPT decoder with multimodal-aware
-  attention layers that fuse cross-modal context
+- **Vision encoder**: image patch encoder projecting image patches into the
+  model's hidden space; `mm_hidden` controls the projection dimension
+- **Audio encoder**: waveform-to-log-spectral-frame encoder projecting audio
+  features into hidden space
+- **Document encoder**: layout-aware encoder for OCR token IDs, normalized
+  bounding boxes, and page IDs; OCR extraction is an upstream responsibility
+- **Unified decoder**: existing KothaGPT decoder over concatenated text and
+  modality embeddings, using decoder self-attention for fusion
+
+The initial encoders are trainable, self-contained baselines. They are not
+pretrained/frozen CLIP or Whisper encoders, and the unified path does not yet
+provide dedicated cross-modal attention. Production-quality pretrained
+backbones, OCR/data pipelines, modality-aware generation, and benchmark targets
+remain follow-up work.
 
 #### Implementation phases
 
@@ -216,7 +222,7 @@ encoder paths with unified decoder, enabling rich multimodal inputs.
 
 **Phase D — Unified model**
 - `ml/models/multimodal/unified.py`: `KothaMultimodal` extending `KothaGPT`
-  with multimodal encoders, cross-modal attention, and unified generation
+  with modality encoders and concatenation-based decoder fusion
 - `ml/configs/mm-unified.yaml`: combined multimodal config
 - Deliverables: `unified.py`, `mm-unified.yaml`, multimodal eval suite
 
