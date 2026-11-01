@@ -42,7 +42,7 @@ Master checklist (auto-verified coverage): `docs/checklist.md`
 ## Phase 5 — Runtime (`docs/runtime-plan.md`)
 - [x] inference API (`services/api` FastAPI + `Backend` mock/canned/hf, `KothaGPTEngine` `ml/inference/engine.py`)
 - [x] streaming (`Backend.chat_stream` + SSE, `make inference-smoke` 3 tokens)
-- [ ] quantization
+- [x] INT8/packed INT4 inference quantization (`ml/inference/quant.py`)
 - [x] model registry (`ml/inference/registry.py` Postgres/in-mem, wired to `GET /v1/models`)
 
 ## Phase 6 — Intelligence
