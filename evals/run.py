@@ -90,6 +90,116 @@ def _load_yaml_suite(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
+_CASE_EXPECTATIONS: dict[str, set[str]] = {
+    "injection": {"blocked", "allowed"},
+    "pii_guard": {"masked", "allowed"},
+    "tool_authz": {"denied", "allowed"},
+    "sandbox": {"blocked", "allowed"},
+    "auth": {"redacted", "allowed"},
+    "poison": {"flagged", "allowed"},
+}
+
+
+class _SuiteValidationError(ValueError, TypeError):
+    pass
+
+
+def _validate_suite(suite: Any, path: Path) -> None:
+    """Reject malformed suites before any target or control is executed."""
+    if not isinstance(suite, dict):
+        raise _SuiteValidationError(f"{path}: suite root must be a mapping")
+    tasks = suite.get("tasks")
+    cases = suite.get("cases")
+    if tasks is None and cases is None:
+        raise _SuiteValidationError(f"{path}: suite must define 'tasks' or 'cases'")
+
+    if tasks is not None:
+        if not isinstance(tasks, list) or not tasks:
+            raise _SuiteValidationError(f"{path}: 'tasks' must be a non-empty list")
+        for task in tasks:
+            if not isinstance(task, str) or not task:
+                raise _SuiteValidationError(f"{path}: task names must be non-empty strings")
+
+    if cases is None:
+        return
+    if not isinstance(cases, list) or not cases:
+        raise _SuiteValidationError(f"{path}: 'cases' must be a non-empty list")
+    categories = suite.get("categories")
+    if not isinstance(categories, dict) or not categories:
+        raise _SuiteValidationError(
+            f"{path}: 'categories' must be a non-empty mapping when using cases"
+        )
+
+    controls: dict[str, str] = {}
+    for category, spec in categories.items():
+        if not isinstance(category, str) or not category:
+            raise _SuiteValidationError(f"{path}: category names must be non-empty strings")
+        if not isinstance(spec, dict):
+            raise _SuiteValidationError(f"{path}: category {category!r} must be a mapping")
+        control = spec.get("control")
+        if control not in _CASE_EXPECTATIONS:
+            raise _SuiteValidationError(
+                f"{path}: category {category!r} has unknown control {control!r}"
+            )
+        controls[category] = control
+
+    seen: set[str] = set()
+    for index, case in enumerate(cases):
+        if not isinstance(case, dict):
+            raise _SuiteValidationError(f"{path}: case {index} must be a mapping")
+        case_id = case.get("id")
+        if not isinstance(case_id, str) or not case_id:
+            raise _SuiteValidationError(f"{path}: case {index} must have a non-empty string 'id'")
+        if case_id in seen:
+            raise _SuiteValidationError(f"{path}: duplicate case id {case_id!r}")
+        seen.add(case_id)
+        category = case.get("category")
+        if category not in controls:
+            raise _SuiteValidationError(
+                f"{path}: case {case_id!r} has unknown category {category!r}"
+            )
+        if not isinstance(case.get("input"), str):
+            raise _SuiteValidationError(f"{path}: case {case_id!r} must have a string 'input'")
+        expect = case.get("expect")
+        if expect not in _CASE_EXPECTATIONS[controls[category]]:
+            raise _SuiteValidationError(
+                f"{path}: case {case_id!r} has invalid 'expect' {expect!r} "
+                f"for control {controls[category]!r}"
+            )
+
+
+def _case_outcome(control: str, text: str) -> str:
+    """Observe what the defensive control does with a case input."""
+    if control == "injection":
+        from services.security.injection import check_output, is_injection
+
+        blocked = is_injection(text)[0] or check_output(text)[0]
+        return "blocked" if blocked else "allowed"
+    if control == "pii_guard":
+        from services.security.pii_guard import detect_pii
+
+        return "masked" if detect_pii(text) else "allowed"
+    if control == "tool_authz":
+        from services.security.authz import DEFAULT_PERMISSIONS, Authorizer
+
+        allowed = Authorizer(DEFAULT_PERMISSIONS).authorize(text).allowed
+        return "allowed" if allowed else "denied"
+    if control == "sandbox":
+        from services.security.sandbox import Sandbox
+
+        return "blocked" if Sandbox(allow_network=False).check_escape(text) else "allowed"
+    if control == "auth":
+        from services.security.secrets import redact, scan_for_secrets
+
+        redacted = bool(scan_for_secrets(text)) or redact(text) != text
+        return "redacted" if redacted else "allowed"
+    if control == "poison":
+        from data.pipeline.security import is_poisoned
+
+        return "flagged" if is_poisoned(text)[0] else "allowed"
+    raise ValueError(f"unknown control {control!r}")
+
+
 def _load_instances(task: str, data_dir: Path, split: str) -> list[dict[str, Any]]:
     path = data_dir / f"{task}.jsonl"
     if not path.exists():
@@ -120,11 +230,12 @@ def run_suite(
     target: Target | None = None,
 ) -> dict[str, Any]:
     suite = _load_yaml_suite(suite_path)
+    _validate_suite(suite, suite_path)
     name = suite.get("name", "suite")
     target = target or MockTarget()
 
     per_task: dict[str, list[dict[str, Any]]] = {}
-    for task in suite.get("tasks", []):
+    for task in suite.get("tasks") or []:
         instances = _load_instances(task, data_dir, split)
         scored: list[dict[str, Any]] = []
         for record in instances:
@@ -153,13 +264,43 @@ def run_suite(
             task_summary[key] = mean_ci(values)
         summary[task] = {"instances": len(scored), "metrics": task_summary}
 
+    per_category: dict[str, list[dict[str, Any]]] = {}
+    categories = suite.get("categories") or {}
+    for case in suite.get("cases") or []:
+        control = categories[case["category"]]["control"]
+        observed = _case_outcome(control, case["input"])
+        passed = observed == case["expect"]
+        result = {
+            "id": case["id"],
+            "category": case["category"],
+            "control": control,
+            "input": case["input"],
+            "expect": case["expect"],
+            "observed": observed,
+            "passed": passed,
+            "status": "pass" if passed else "fail",
+        }
+        per_category.setdefault(case["category"], []).append(result)
+
+    for category, scored in per_category.items():
+        passes = [1.0 if item["passed"] else 0.0 for item in scored]
+        summary[category] = {
+            "instances": len(scored),
+            "passed": sum(1 for item in scored if item["passed"]),
+            "failed": sum(1 for item in scored if not item["passed"]),
+            "metrics": {"pass_rate": mean_ci(passes)},
+        }
+        print(f"  {category}: {len(scored)} cases")
+
     return {
         "suite": name,
         "target": type(target).__name__.lower().removesuffix("target"),
         "split": split,
         "date": _dt.datetime.now(_dt.UTC).date().isoformat(),
         "summary": summary,
-        "tasks": {task: scored for task, scored in per_task.items()},
+        "tasks": per_task,
+        "cases": [item for scored in per_category.values() for item in scored],
+        "cases_by_category": per_category,
     }
 
 

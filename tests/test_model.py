@@ -123,8 +123,9 @@ def test_generate_extends_past_max_context() -> None:
     model = KothaGPT(cfg)
     model.eval()
     long = torch.randint(0, 64, (1, 12))
-    out = model.generate(long, max_new_tokens=3, temperature=1.0)
-    assert out.shape == (1, 7)
+    out = model.generate(long, max_new_tokens=3, temperature=0.0)
+    assert out.shape == (1, 15)
+    assert torch.equal(out[:, : long.shape[1]], long)
 
 
 @pytest.mark.parametrize(

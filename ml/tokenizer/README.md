@@ -1,14 +1,14 @@
 # Tokenizer — Phase 1B
 
-Train and benchmark our own Bangla tokenizer (BPE and Unigram), then freeze the
-winner.
+Train and benchmark our own Bangla tokenizer (BPE, Unigram, and WordPiece), then
+freeze the winner.
 
 ```
 Bangla Corpus
     ↓
 Normalizer (Phase 1A)
     ↓
-Tokenizer Trainer (BPE / Unigram)
+Tokenizer Trainer (BPE / Unigram / WordPiece)
     ↓
 Vocabulary
     ↓
@@ -17,7 +17,7 @@ Tokenizer
 Token Efficiency Benchmark
 ```
 
-Both algorithms are implemented from scratch in pure stdlib Python (no
+All three algorithms are implemented from scratch in pure stdlib Python (no
 `sentencepiece` / `tokenizers` dependency) and are word-based with a GPT-2-style
 leading `▁` space marker.
 
@@ -29,9 +29,10 @@ python -m ml.tokenizer.cli train \
   --corpus data/processed/$(cat data/processed/CURRENT)/train \
   --algorithm bpe --vocab-size 16000 --out ml/tokenizer/artifacts/bpe-16000
 
-# Run the full experiment matrix: {bpe, unigram} x {16k, 32k, 50k}
+# Run the full experiment matrix: {bpe, unigram, wordpiece} x {16k, 32k, 50k}
 python -m ml.tokenizer.cli experiments \
   --corpus data/processed/$(cat data/processed/CURRENT)/train \
+  --algorithms bpe,unigram,wordpiece \
   --out ml/tokenizer/artifacts
 
 # Encode / benchmark a saved tokenizer
@@ -70,7 +71,10 @@ selected by lowest average across the five sets.
 - **Unigram** (`unigram.py`) — substring candidate vocab, EM re-estimation with
   Viterbi best-path counts, pruning to the target vocab size; encoding via
   Viterbi shortest path over a trie.
-- Both seed the vocabulary with the full Bengali block, the Bangla danda `।`
+- **WordPiece** (`wordpiece.py`) — merges selected by the likelihood increase
+  `freq(ab) / (freq(a) * freq(b))`; encoding via greedy longest-match-first over
+  the merged subwords.
+- All three seed the vocabulary with the full Bengali block, the Bangla danda `।`
   (U+0964), ASCII, and common punctuation so unseen characters still tokenize
   instead of collapsing to `<unk>`. Emoji are intentionally not in the vocab.
 

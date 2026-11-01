@@ -1,4 +1,4 @@
-"""Base tokenizer interface shared by the BPE and Unigram implementations.
+"""Base tokenizer interface shared by the BPE, Unigram, and WordPiece implementations.
 
 Both algorithms operate word-based with a leading "▁" (U+2581) space marker,
 GPT-2 style: every word is encoded as "▁"+word and the marker is restored to a
@@ -111,4 +111,8 @@ def load_tokenizer(path: str | Path) -> BaseTokenizer:
         from .unigram import UnigramTokenizer
 
         return UnigramTokenizer.from_dict(data)
+    if kind == "wordpiece":
+        from .wordpiece import WordPieceTokenizer
+
+        return WordPieceTokenizer.from_dict(data)
     raise ValueError(f"unknown tokenizer type: {kind}")

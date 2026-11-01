@@ -1,0 +1,32 @@
+model:
+  architecture: decoder_transformer
+  vocab_size: 698
+  hidden_size: 2048
+  num_layers: 24
+  num_heads: 16
+  max_position_embeddings: 16384
+  rms_norm_eps: 1e-5
+  norm_type: rmsnorm
+  tie_word_embeddings: true
+  rope_theta: 500000.0
+  coding_tokens: true
+
+training:
+  batch_size: 2
+  gradient_accumulation_steps: 16
+  learning_rate: 1.0e-5
+  max_steps: 2000
+  warmup_steps: 200
+  min_lr: 1.0e-6
+  lr_schedule: cosine
+  mixed_precision: bf16
+
+data:
+  train: data/processed/train
+  validation: data/processed/validation
+  tokenizer_path: ml/tokenizer/artifacts/best/tokenizer.json
+  task_type: coding
+
+tier:
+  name: medium
+  base_model: kothagpt-medium

@@ -263,6 +263,33 @@ covered by its mapped plan file (auto-review on `make plans-check`).
 - [ ] Secure model artifacts
 - [ ] Red-team testing
 
+## 🔵 Production Model Family — plan: docs/production-model-plan.md
+
+
+
+- [ ] Kotha Nano / Small / Medium / Large tiering
+
+- [ ] MoE research track for frontier efficiency
+
+- [ ] Strong reasoning stack (reasoning SFT, reasoning head, verifier loop)
+
+- [ ] Strong coding stack (coding SFT, coding token extensions, execution eval)
+
+- [ ] Advanced multimodal pipelines (vision, audio, document, unified)
+
+- [ ] Model routing system (complexity classifier, tier escalation, cost/performance)
+
+- [ ] Tier-specific eval gates (nano/small/medium/large)
+
+- [ ] Adversarial coverage (prompt injection, jailbreak, hallucination, bias)
+
+- [ ] Red-team testing and regression gates
+
+- [ ] Routing cost/performance ≥ 30% improvement
+
+- [ ] Adversarial success rate < 5%
+
+
 ## 🚀 Kotha GPT AI Ecosystem — plan: docs/ecosystem-plan.md
 
 - [ ] AI model hub

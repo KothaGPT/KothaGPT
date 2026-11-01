@@ -116,7 +116,8 @@ per-platform modules, Makefile delegation),
 `docs/infra-plan.md` (GPU cluster, serving, observability, DR),
 `docs/ecosystem-plan.md` (hubs, marketplaces, fine-tuning, hosted inference),
 `docs/security-plan.md` (injection, sandbox, secrets, supply chain, red-team),
-`docs/context-engineering-plan.md` (prompts, hierarchy, window, safe formatting, registry).
+`docs/context-engineering-plan.md` (prompts, hierarchy, window, safe formatting, registry),
+`docs/production-model-plan.md` (tiering, MoE, reasoning/coding, multimodal, routing, adversarial eval).
 Product decisions: `docs/foundation.md` (living decision record; TENTATIVE until
 confirmed via `docs/foundation-plan.md`).
 
@@ -153,6 +154,7 @@ confirmed via `docs/foundation-plan.md`).
 - Phase 8 — Evaluation: `docs/eval-plan.md`.
 - Phase 9 — Infrastructure: `docs/infra-plan.md`.
 - Phase 10 — Security: `docs/security-plan.md`.
+- Phase 10.5 — Production Model Family: `docs/production-model-plan.md` (tiering, MoE, reasoning/coding, multimodal, routing, adversarial eval).
 - Phase 7b — Ecosystem: `docs/ecosystem-plan.md`.
 
 Owner map for new plans:
@@ -165,3 +167,6 @@ Owner map for new plans:
 - `services/security` + `data/pipeline/security.py` → `docs/security-plan.md`
 - `packages/*` → `docs/sdk-plan.md`; product decisions → `docs/foundation-plan.md`
 - `apps/*` + `services/hub` + `services/marketplace` → `docs/ecosystem-plan.md`
+- `ml/models/moe/`, `ml/models/tier.py`, `ml/models/multimodal/` → `docs/production-model-plan.md`
+- `ml/configs/nano.yaml`, `medium.yaml`, `large.yaml`, `moe.yaml` → `docs/production-model-plan.md`
+- `evals/suites/tier-*.yaml`, `adversarial.py`, `redteam.py` → `docs/production-model-plan.md`

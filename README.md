@@ -77,3 +77,4 @@ kothagpt chat --stream "বাংলায় হ্যালো"
 ```
 
 Training is intentionally disabled by default. Configure a dataset and GPU environment before running training commands.
+

@@ -50,7 +50,12 @@ ml/tokenizer/artifacts/
 ml/pretrain/artifacts/
 data/tokenized/
 models/
+!ml/models/
+ml/models/*.pt
+ml/models/*.bin
+ml/models/artifacts/
 checkpoints/
+!ml/trainer/artifacts/
 
 # OS / editors
 .DS_Store

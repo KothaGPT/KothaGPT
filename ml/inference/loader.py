@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ml.inference.registry import get_registry
-from ml.inference.quant import quantize_model
+
 
 def load_model(model_id: str = "kothagpt", device: str = "cpu", quant: str = "none"):
     reg = get_registry()
@@ -45,6 +45,8 @@ def load_model(model_id: str = "kothagpt", device: str = "cpu", quant: str = "no
         model.load_state_dict(model_state, strict=False)
 
     if quant != "none":
+        from ml.inference.quant import quantize_model
+
         bits = 8 if quant == "int8" else 4
         quantize_model(model, bits=bits)
 

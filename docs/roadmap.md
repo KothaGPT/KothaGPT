@@ -90,3 +90,13 @@ Master checklist (auto-verified coverage): `docs/checklist.md`
 - [x] PII guard + audit + abuse detection (`data/pipeline/quality.py` PII, `services/security` audit log, `make eval-security`)
 - [x] poisoning detection + supply chain + artifact signing (`make sbom-check`, `services/api` artifact `digest`, `test_artifact_signing` stub)
 - [x] red-team testing (`make redteam-drill`, 3 injection blocked/5 authz denied)
+
+## Phase 10.5 — Production Model Family (`docs/production-model-plan.md`)
+- [ ] Kotha Nano / Small / Medium / Large tiering (`ml/configs/nano.yaml`, `medium.yaml`, `large.yaml`, `ml/models/tier.py`)
+- [ ] MoE research track for frontier efficiency (`ml/models/moe/`, `ml/configs/moe.yaml`, `ml/inference/moe_engine.py`)
+- [ ] Strong reasoning stack (`ml/configs/sft-reasoning.yaml`, `ml/sft/reasoning.py`, `ml/models/reasoning_head.py`)
+- [ ] Strong coding stack (`ml/configs/sft-coding.yaml`, `ml/sft/coding.py`, coding token extensions)
+- [ ] Advanced multimodal pipelines (`ml/models/multimodal/`, `ml/configs/mm-vision.yaml`, `mm-unified.yaml`)
+- [ ] Model routing system (`ml/inference/router.py`, `services/api/router.py`, `ml/inference/router_config.yaml`)
+- [ ] Stronger evaluation and adversarial coverage (`evals/suites/tier-*.yaml`, `evals/suites/adversarial.yaml`, `evals/suites/redteam.yaml`, `evals/adversarial.py`, `evals/redteam.py`)
+- [ ] Tier-specific eval gates pass; adversarial success rate < 5%; routing cost/performance ≥ 30% improvement

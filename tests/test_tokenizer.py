@@ -1,4 +1,4 @@
-"""Tests for the Phase 1B Bangla tokenizer (BPE and Unigram)."""
+"""Tests for the Phase 1B Bangla tokenizer (BPE, Unigram, and WordPiece)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from ml.tokenizer import (
     load_tokenizer,
     train_bpe,
     train_unigram,
+    train_wordpiece,
 )
 from ml.tokenizer.benchmark import (
     GATED_SETS,
@@ -173,6 +174,18 @@ def test_unigram_trains_and_roundtrips(corpus):
         assert tokenizer.decode(tokenizer.encode(text)) == text
 
 
+def test_wordpiece_trains_vocab(corpus):
+    tokenizer = train_wordpiece(corpus, vocab_size=400, min_frequency=2)
+    assert len(tokenizer.vocab) >= 300
+    assert tokenizer.merges
+
+
+def test_wordpiece_roundtrip(corpus):
+    tokenizer = train_wordpiece(corpus, vocab_size=400, min_frequency=2)
+    for text in corpus[:20]:
+        assert tokenizer.decode(tokenizer.encode(text)) == text
+
+
 def test_vocab_contains_special_tokens(corpus):
     tokenizer = train_bpe(corpus, vocab_size=200, min_frequency=2)
     for special in ("<unk>", "<bos>", "<eos>", "<pad>"):
@@ -182,7 +195,8 @@ def test_vocab_contains_special_tokens(corpus):
 def test_save_load_roundtrip(corpus, tmp_path):
     bpe = train_bpe(corpus, vocab_size=300, min_frequency=2)
     unigram = train_unigram(corpus, vocab_size=300, min_frequency=2, iterations=2)
-    for tokenizer, name in ((bpe, "bpe"), (unigram, "unigram")):
+    wordpiece = train_wordpiece(corpus, vocab_size=300, min_frequency=2)
+    for tokenizer, name in ((bpe, "bpe"), (unigram, "unigram"), (wordpiece, "wordpiece")):
         tokenizer.save(tmp_path / name)
         loaded = load_tokenizer(tmp_path / name / "tokenizer.json")
         assert type(loaded) is type(tokenizer)
@@ -215,6 +229,9 @@ def test_unseen_bangla_characters_encode(corpus):
     unigram = train_unigram(corpus, vocab_size=200, min_frequency=2, iterations=2)
     ids = unigram.encode(text)
     assert unigram.decode(ids) == text
+    wordpiece = train_wordpiece(corpus, vocab_size=200, min_frequency=2)
+    ids = wordpiece.encode(text)
+    assert wordpiece.decode(ids) == text
 
 
 def test_benchmark_shape(corpus):
