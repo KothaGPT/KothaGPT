@@ -15,6 +15,7 @@ from torch.utils.data import Dataset
 _ALLOWED_LANGUAGES = {"bn", "en", "multilingual", "mixed", "unknown"}
 _ALLOWED_CATEGORIES = {
     "instruction",
+    "general",
     "coding",
     "reasoning",
     "conversation",

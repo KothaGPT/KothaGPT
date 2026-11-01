@@ -27,10 +27,11 @@ from data.manifest import (
 from data.pipeline import normalize as norm
 from data.pipeline import quality
 from data.pipeline.config import PipelineConfig, run_pipeline
+from data.pipeline.instruction import run_instruction_pipeline
 
 _MAIN = (
     "raw -> normalize -> quality filter -> deduplicate -> train/validation "
-    "split -> stats -> versioned shards"
+    "and test split -> stats -> versioned shards"
 )
 
 
@@ -134,6 +135,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Bloom filter false-positive rate in (0, 1)",
     )
     run_p.add_argument("--validation-ratio", type=float, default=0.02)
+    run_p.add_argument(
+        "--test-ratio",
+        type=float,
+        default=0.01,
+        help="held-out test fraction in [0,1); set to 0 to disable the test split",
+    )
     run_p.add_argument("--shard-size", type=int, default=100_000)
     run_p.add_argument("--no-gzip", action="store_true")
     run_p.add_argument(
@@ -141,6 +148,32 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="permissive development bypass: skip source-provenance checks "
         "(explicit opt-in; production fails closed by default)",
+    )
+
+    instruction_p = sub.add_parser(
+        "instruction", help="Build quality-gated, versioned instruction shards."
+    )
+    instruction_sub = instruction_p.add_subparsers(dest="instruction_command", required=True)
+    instruction_run = instruction_sub.add_parser("run", help="Process curated instruction JSONL.")
+    instruction_run.add_argument("input", help="JSONL records with messages or instruction/output")
+    instruction_run.add_argument("--out-root", default="data/processed")
+    instruction_run.add_argument("--version-label", default=None)
+    instruction_run.add_argument("--min-score", type=float, default=0.5)
+    instruction_run.add_argument("--validation-ratio", type=float, default=0.02)
+    instruction_run.add_argument("--test-ratio", type=float, default=0.01)
+    instruction_run.add_argument("--min-chars", type=int, default=1)
+    instruction_run.add_argument("--max-chars", type=int, default=1_000_000)
+    instruction_run.add_argument("--min-words", type=int, default=1)
+    instruction_run.add_argument("--near-dedup", action="store_true")
+    instruction_run.add_argument("--no-spam-check", action="store_true")
+    instruction_run.add_argument("--no-toxic-check", action="store_true")
+    instruction_run.add_argument("--pii-mode", choices=("drop", "mask"), default="drop")
+    instruction_run.add_argument("--copyrighted-titles", default=None)
+    instruction_run.add_argument("--registry", default=None)
+    instruction_run.add_argument(
+        "--dev-bypass",
+        action="store_true",
+        help="allow unregistered sources (licenses are still required and checked)",
     )
 
     norm_p = sub.add_parser("normalize", help="Normalize a text file or stdin.")
@@ -283,6 +316,7 @@ def _cmd_version(args: argparse.Namespace) -> int:
         print(f"docs (after dedup): {counts.get('after_dedup', 'n/a')}")
         print(f"train: {counts.get('train', 'n/a')}")
         print(f"validation: {counts.get('validation', 'n/a')}")
+        print(f"test: {counts.get('test', 'n/a')}")
         print(f"manifest: {manifest}")
     return 0
 
@@ -321,6 +355,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         dedup_bloom_capacity=args.bloom_capacity,
         dedup_bloom_fp_rate=args.bloom_fp_rate,
         validation_ratio=args.validation_ratio,
+        test_ratio=args.test_ratio,
         shard_size=args.shard_size,
         gzip_output=not args.no_gzip,
         strict=not args.dev_bypass,
@@ -341,9 +376,44 @@ def _cmd_run(args: argparse.Namespace) -> int:
             f"(exact {dedup_counts['removed_exact']:,}, "
             f"near {dedup_counts['removed_near']:,})"
         )
-    print(f"  train / val:     {summary['train']:,} / {summary['validation']:,}")
+    print(
+        f"  train / val / test: {summary['train']:,} / "
+        f"{summary['validation']:,} / {summary['test']:,}"
+    )
     print(f"  version id:      {summary['version_id']}")
     print(f"  manifest:        {summary['manifest']}")
+    return 0
+
+
+def _cmd_instruction(args: argparse.Namespace) -> int:
+    if args.instruction_command != "run":
+        raise AssertionError(f"unhandled instruction command {args.instruction_command}")
+    registry = load_registry(args.registry) if args.registry else get_registry()
+    summary = run_instruction_pipeline(
+        args.input,
+        args.out_root,
+        min_score=args.min_score,
+        validation_ratio=args.validation_ratio,
+        test_ratio=args.test_ratio,
+        min_chars=args.min_chars,
+        max_chars=args.max_chars,
+        min_words=args.min_words,
+        near_dedup=args.near_dedup,
+        check_spam=not args.no_spam_check,
+        check_toxic=not args.no_toxic_check,
+        pii_mode=args.pii_mode,
+        strict=not args.dev_bypass,
+        version_label=args.version_label,
+        copyrighted_titles_path=args.copyrighted_titles,
+        registry=registry,
+    )
+    print(f"Instruction pipeline complete: {summary['version_id']}")
+    print(
+        f"  train / validation / test: {summary['train']:,} / "
+        f"{summary['validation']:,} / {summary['test']:,}"
+    )
+    print(f"  quality scores: {summary['quality_scores']['count']:,}")
+    print(f"  manifest: {summary['manifest']}")
     return 0
 
 
@@ -455,6 +525,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "run":
         return _cmd_run(args)
+    if args.command == "instruction":
+        return _cmd_instruction(args)
     if args.command == "normalize":
         return _cmd_normalize(args)
     if args.command == "check":

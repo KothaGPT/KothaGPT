@@ -78,6 +78,7 @@ class PipelineConfig:
 
     # Split
     validation_ratio: float = 0.02
+    test_ratio: float = 0.01
 
     # Shards
     shard_size: int = 100_000
@@ -278,11 +279,16 @@ def run_pipeline(cfg: PipelineConfig, registry: DatasetRegistry | None = None) -
     summary["after_dedup"] = len(deduped)
     summary["dedup"] = dedup_counts
 
-    # 8. Deterministic train/validation split.
-    split_records = [split.split_record(r, validation_ratio=cfg.validation_ratio) for r in deduped]
-    split_records = split.ensure_nonempty_validation(split_records)
+    # 8. Deterministic source/domain-stratified split.
+    split_records = split.split_records(
+        deduped,
+        validation_ratio=cfg.validation_ratio,
+        test_ratio=cfg.test_ratio,
+    )
+    split.assert_no_split_contamination(split_records)
     summary["train"] = sum(1 for r in split_records if r["split"] == "train")
     summary["validation"] = sum(1 for r in split_records if r["split"] == "validation")
+    summary["test"] = sum(1 for r in split_records if r["split"] == "test")
 
     # 9. Statistics report.
     stats_data = stats.compute_stats(iter(split_records))
@@ -320,12 +326,23 @@ def run_pipeline(cfg: PipelineConfig, registry: DatasetRegistry | None = None) -
         shard_size=cfg.shard_size,
         gzip_output=cfg.gzip_output,
     )
+    test_shards: list[dict] = []
     version_obj.shards = train_shards + val_shards
     version_obj.files = {
         "train_dir": str(train_dir.relative_to(out_root)),
         "validation_dir": str(val_dir.relative_to(out_root)),
         "report_dir": str((version_dir / "report").relative_to(out_root)),
     }
+    if cfg.test_ratio > 0:
+        test_dir = version_dir / "test"
+        test_shards = io.write_shards(
+            (r for r in split_records if r["split"] == "test"),
+            test_dir,
+            shard_size=cfg.shard_size,
+            gzip_output=cfg.gzip_output,
+        )
+        version_obj.shards += test_shards
+        version_obj.files["test_dir"] = str(test_dir.relative_to(out_root))
     version_obj.config = cfg_dict
 
     manifest_path = version.write_manifest(version_obj, version_dir)
@@ -333,4 +350,5 @@ def run_pipeline(cfg: PipelineConfig, registry: DatasetRegistry | None = None) -
     summary["manifest"] = str(manifest_path)
     summary["train_shards"] = train_shards
     summary["validation_shards"] = val_shards
+    summary["test_shards"] = test_shards
     return summary

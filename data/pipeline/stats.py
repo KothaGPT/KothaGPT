@@ -121,6 +121,21 @@ def write_report(stats: dict, out_path: Path) -> Path:
         for k, v in stats.get("splits", {}).items():
             lines.append(f"| {k} | {v:,} |")
         lines.append("")
+    if stats.get("quality_scores"):
+        quality_scores = stats["quality_scores"]
+        lines.append("## Quality score distribution")
+        for key in ("count", "min", "p10", "median", "mean", "p90", "max"):
+            if key in quality_scores:
+                value = quality_scores[key]
+                if key == "count":
+                    lines.append(f"- **{key}**: {value:,}")
+                else:
+                    lines.append(f"- **{key}**: {value:.3f}")
+        histogram = quality_scores.get("histogram", {})
+        if histogram:
+            lines.extend(["", "| score range | records |", "| --- | ---: |"])
+            lines.extend(f"| {bucket} | {count:,} |" for bucket, count in histogram.items())
+        lines.append("")
     if stats.get("dedup"):
         dedup_stats = stats["dedup"]
         lines.append("## Deduplication")

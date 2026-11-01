@@ -33,7 +33,7 @@ Guiding principles:
 | Trainer core | `ml/trainer/` loop, checkpoint (atomic/resume), scheduler, monitor, DDP/FSDP, mixed precision | SFT still uses a simpler single-process loop rather than the resumable core |
 | SFT package | `ml/sft/` templates, assistant-masked dataset, trainer, and CLI; CLI writes inference-loadable checkpoints and provenance metadata | SFT loop does not yet reuse the full resumable trainer/checkpoint path |
 | Preference tuning | `ml/preference/` DPO dataset and trainer | out of scope (follow-up plan) |
-| Data pipeline | `data/pipeline/` normalize → quality → spam → toxic → PII → copyright → dedup → split → version; `data/synthetic/` + instruction shards (`data/processed/<ver>/instruction/`) planned in `docs/dataset-pipeline-plan.md` (A8) | no instruction shards produced yet; no role/content schema module |
+| Data pipeline | `data/pipeline/` prose and instruction paths with normalization, provenance/license, safety, deduplication, scoring, splitting, and versioned shards | no production instruction corpus is checked in; supply curated/reviewed source JSONL |
 | Eval | SFT family suites, checkpoint-backed `model` target, and base-vs-SFT non-regression command (`make sft-gate`) | checked-in SFT v1 data is a tiny pipeline fixture, not a release benchmark; no real checkpoint/data is present |
 | Tokenizer | frozen 16k BPE (`ml/tokenizer/artifacts/best/`, GPT-2-style `▁`) | no chat special tokens (e.g. `<&#124;im_start&#124;>`) verified in vocab |
 | Configs | `ml/configs/sft*.yaml` and `ml/configs/small.yaml` | production data/model artifacts must be supplied by the run owner |
@@ -47,21 +47,26 @@ Guiding principles:
 Goal: a versioned, quality-gated, Bangla-first instruction corpus that feeds
 every downstream WS.
 
-- Implement the dataset-pipeline A8/A9 plan: Alpaca-style curated Bangla
-  instructions + synthetic generation pipeline (`data/synthetic/`) with
-  answer-extraction verification.
+- Curate JSONL records as either `{instruction, input?, output, source,
+  license}` or `{messages: [{role, content}], source, license}`. The
+  `kothagpt-data instruction run` pipeline canonicalizes both forms and applies
+  provenance, license, PII, spam, toxic-content, exact/optional near-dedup,
+  and deterministic split gates before emitting shards. Synthetic records must
+  be reviewed and use the same schema/gates; no model is invoked by the
+  pipeline.
 - Add `data/pipeline/schema.py` validating
   `{messages: [{role: system|user|assistant, content}], source, license,
   quality_score}`; reject malformed or empty-answer records.
-- Run through the existing Phase-B gates (spam/toxic/PII/copyright) and the B6
-  quality scorer (`--min-score`) before a release; land shards at
-  `data/processed/<ver>/instruction/` in train/validation/test splits.
+- Run through the Phase-B gates and the deterministic, model-free quality
+  scorer (`--min-score`) before a release; land shards at
+  `data/processed/<ver>/instruction/{train,validation,test}/`.
 - Emit per-task-type tags (`general`, `reasoning`, `coding`, `conversation`,
   `function_call`, `tool_use`) so WS-3..WS-10 can mix selectively.
 - Deliverables: `data/synthetic/` generators, `schema.py`, instruction shards +
   `MANIFEST.json` with quality histogram.
 - Metric: instruction shard passes all gates with zero PII/license failures;
-  ≥ 95% records non-empty; ≥ threshold quality score; reproducible from config.
+  all answers non-empty; ≥ threshold quality score; score histogram and
+  percentiles are recorded; reproducible from config.
 
 ### WS-2 — SFT pipeline তৈরি (`ml/sft/`)
 

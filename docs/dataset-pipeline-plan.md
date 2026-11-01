@@ -64,14 +64,33 @@ the manifest is an empty template.
 - **Success:** each record validated as `{question, answer, context?, source,
   verified}`; ≥ 95% answers non-empty after filters.
 
-### A8. Instruction dataset (Instruction dataset তৈরি) 🆕
+### A8. Instruction dataset (Instruction dataset তৈরি) 🔶
+**Status:** the role/content schema and quality-gated, versioned JSONL
+ingestion command are implemented; no release-quality curated corpus is
+checked in.
 - **Do:** build a small curated instruction set (Alpaca-style, Bangla) and a
-  synthetic generation pipeline (`data/synthetic/`), gated by Phase C quality
-  scoring before it is allowed into a release.
+  documented curation/synthetic input process, gated by the instruction
+  pipeline's quality and safety checks before it is allowed into a release.
 - **Success:** `data/processed/<ver>/instruction/` shards; instruction quality
   score (≥ threshold) logged in the manifest.
 
-### A9. Conversation dataset (Conversation dataset তৈরি) 🆕
+Run curated or independently reviewed synthetic JSONL through
+`kothagpt-data instruction run INPUT.jsonl`. Records use either Alpaca-style
+`instruction`/`input`/`output` fields or `messages: [{role, content}]`, and
+must carry a registered `source` and allowed `license` (unless the explicit
+development bypass is used; license checks remain mandatory). The command
+normalizes messages, rejects malformed or empty assistant answers, runs PII,
+spam, toxic-content, copyright/license, deduplication, and quality gates, then
+writes reproducible train/validation/test shards and a quality-score
+distribution into the version manifest and report. Use
+`--copyrighted-titles PATH` to apply the existing title blocklist. This pipeline
+does not generate model content; reviewed synthetic records pass through the
+same gates.
+
+### A9. Conversation dataset (Conversation dataset তৈরি) 🔶
+**Status:** multi-turn role/content records are validated by the instruction
+schema and can use the same gated shard pipeline; no conversation corpus is
+checked in.
 - **Do:** multi-turn extraction from Bangla forums/subreddits (license-checked)
   and/or synthetic dialogue chains; schema
   `{messages: [{role, content}], source}`.
@@ -148,11 +167,22 @@ gate (`--require-license`); license counts reported in `report/REPORT.md`.
 ## Phase C — Split & Versioning (বিভাগ ও সংস্করণ)
 
 ### C1. Train/validation/test split (Train/validation/test split তৈরি) 🔶
-**Status:** `data/pipeline/split.py` emits deterministic train/validation.
+**Status:** `data/pipeline/split.py` emits deterministic,
+source/domain-stratified train/validation/test splits.
 - **Do:** add a held-out **test** set (`--test-ratio`, default 0.01),
   **stratify by source/domain** so rare sources aren't starved, and
-  **contamination prevention** (train/test hash intersection check).
-- **Success:** train/val/test reported; zero cross-split near-duplicate matches.
+  **contamination prevention** (cross-split exact-text hash check).
+- **Success:** train/val/test reported; no exact-text leakage across splits.
+  `--near-dedup` additionally removes near-duplicates corpus-wide before
+  splitting.
+
+The split is deterministic per run: records are grouped by explicit `domain`,
+then by URL host, then by `source` (or `unknown`). Within each stratum, unique
+text is ordered by a SHA-256-derived key and allocated to the configured split
+ratios; duplicate text is kept together. Set `--test-ratio 0` to retain the
+train/validation-only layout. Exact text hashes are checked across every split
+before output; optional `--near-dedup` runs before splitting to filter
+near-duplicates corpus-wide.
 
 ### C2. Dataset versioning system (Dataset versioning ব্যবস্থা তৈরি) 🔶
 **Status:** `data/pipeline/version.py` already content-addresses every run and
