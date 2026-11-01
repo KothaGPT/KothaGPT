@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from evals.run import MockTarget, _record_prompt, run_suite
+from evals.sft_gate import evaluate_sft_gate
 
 _ROOT = Path(__file__).parent.parent
 _SUITES = (
@@ -58,6 +59,12 @@ def test_sft_conversation_prompt_keeps_prior_assistant_turns():
     assert prompt.endswith("<assistant>\n")
 
 
+def test_sft_instruction_prompt_matches_training_template():
+    assert _record_prompt({"instruction": "Do this", "input": "with that"}) == (
+        "<user>\nDo this\nwith that\n<assistant>\n"
+    )
+
+
 @pytest.mark.parametrize(
     ("family", "metric"),
     [("sft-fc", "function_call_match"), ("sft-tool-use", "tool_call_match")],
@@ -73,3 +80,37 @@ def test_sft_structured_scorers_reject_wrong_arguments(family, metric):
         target=WrongCallTarget(),
     )
     assert results["summary"][family]["metrics"][metric]["mean"] == 0.0
+
+
+def test_sft_model_gate_fails_when_candidate_regresses():
+    class ReferenceTarget:
+        def generate(self, prompt, record):
+            return record.get("reference", record["output"])
+
+    class RegressedTarget:
+        def generate(self, prompt, record):
+            return ""
+
+    result = evaluate_sft_gate(
+        ReferenceTarget(),
+        RegressedTarget(),
+        split="test",
+        families=("sft-bn",),
+    )
+    assert result["gate"]["passed"] is False
+    assert any("sft-bn.exact_match" in failure for failure in result["gate"]["failures"])
+
+
+def test_sft_model_gate_rejects_empty_candidate_even_if_base_is_empty():
+    class EmptyTarget:
+        def generate(self, prompt, record):
+            return ""
+
+    result = evaluate_sft_gate(
+        EmptyTarget(),
+        EmptyTarget(),
+        split="test",
+        families=("sft-bn",),
+    )
+    assert result["gate"]["passed"] is False
+    assert "empty completions" in result["gate"]["failures"][-1]

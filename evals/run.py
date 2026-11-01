@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import Any
 
 from .metrics import (
-    bengali_script_ratio,
     bangla_quality_metrics,
+    bengali_script_ratio,
     context_token_coverage,
     context_unsupported_token_rate,
     exact_match,
@@ -67,6 +67,7 @@ def _sft_structured_scorer(metric: str) -> Callable[[str, str], dict[str, float]
 
     return score
 
+
 _SFT_TASKS = {
     "sft-bn",
     "sft-en",
@@ -77,6 +78,7 @@ _SFT_TASKS = {
     "sft-fc",
     "sft-tool-use",
 }
+
 
 # WS-4 preference task: score a (chosen, rejected, reference) triple.
 def _preference_scorer(prediction: str, record: dict[str, Any]) -> dict[str, float]:
@@ -186,6 +188,33 @@ class PredictionsTarget(Target):
             return self._predictions[record_id]
         except KeyError as exc:
             raise ValueError(f"no prediction found for record_id {record_id!r}") from exc
+
+
+class ModelTarget(Target):
+    """Generates predictions from a local KothaGPT checkpoint."""
+
+    def __init__(
+        self,
+        checkpoint: str | Path,
+        tokenizer_path: str | Path,
+        *,
+        device: str = "cpu",
+        max_new_tokens: int = 128,
+    ) -> None:
+        if max_new_tokens <= 0:
+            raise ValueError("max_new_tokens must be positive")
+        from ml.inference.engine import KothaGPTEngine
+
+        self.engine = KothaGPTEngine(
+            checkpoint=checkpoint,
+            tokenizer_path=tokenizer_path,
+            device=device,
+        )
+        self.max_new_tokens = max_new_tokens
+
+    def generate(self, prompt: str, record: dict[str, Any]) -> str:
+        del record
+        return "".join(self.engine.generate(prompt, max_new_tokens=self.max_new_tokens)).strip()
 
 
 def _load_yaml_suite(path: Path) -> dict[str, Any]:
@@ -433,19 +462,24 @@ def _record_prompt(record: dict[str, Any]) -> str:
             return record[field]
     messages = record.get("messages")
     if isinstance(messages, list) and messages:
-        prompt_messages = messages
+        prompt_messages = list(messages)
         if messages[-1].get("role") == "assistant" and (
             "output" in record or "reference" in record
         ):
             prompt_messages = messages[:-1]
-        return "\n".join(
-            f"<{message['role']}>\n{message['content']}"
-            for message in prompt_messages
-            if isinstance(message, dict)
-        ) + "\n<assistant>\n"
+        from ml.sft.templates import apply_chat_template
+
+        return apply_chat_template(
+            [
+                {"role": message["role"], "content": message["content"]}
+                for message in prompt_messages
+                if isinstance(message, dict)
+            ]
+        )
     instruction = record.get("instruction", "")
     input_text = record.get("input", "")
-    return f"{instruction}\n{input_text}".strip()
+    user_content = "\n".join(part for part in (instruction, input_text) if part)
+    return f"<user>\n{user_content}\n<assistant>\n"
 
 
 def run_suite(
@@ -671,8 +705,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", default=str(_SUITE_DIR / "bangla.yaml"))
     parser.add_argument("--split", choices=("dev", "test", "all"), default="all")
-    parser.add_argument("--target", choices=("mock", "api", "predictions"), default="mock")
+    parser.add_argument("--target", choices=("mock", "api", "predictions", "model"), default="mock")
     parser.add_argument("--predictions", help="JSONL file with record_id and prediction fields")
+    parser.add_argument("--checkpoint", help="local model checkpoint file or artifact directory")
+    parser.add_argument("--tokenizer", help="tokenizer JSON file or artifact directory")
+    parser.add_argument("--device", default="cpu", help="inference device (cpu or cuda[:N])")
+    parser.add_argument("--max-new-tokens", type=int, default=128)
     parser.add_argument(
         "--compare-predictions",
         help="Optional baseline JSONL predictions to compare against the candidate",
@@ -686,6 +724,15 @@ def main(argv: list[str] | None = None) -> int:
         target: Target = MockTarget()
     elif args.target == "api":
         target = ApiTarget()
+    elif args.target == "model":
+        if not args.checkpoint or not args.tokenizer:
+            parser.error("--checkpoint and --tokenizer are required when --target=model")
+        target = ModelTarget(
+            args.checkpoint,
+            args.tokenizer,
+            device=args.device,
+            max_new_tokens=args.max_new_tokens,
+        )
     else:
         if not args.predictions:
             parser.error("--predictions is required when --target=predictions")

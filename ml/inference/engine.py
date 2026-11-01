@@ -70,6 +70,8 @@ class KothaGPTEngine:
             self.model.load_state_dict(model_state, strict=True)
         else:
             config_path = ckpt_path.parent / "config.json"
+            if not config_path.is_file() and ckpt_path.parent.name == "checkpoints":
+                config_path = ckpt_path.parent.parent / "config.json"
             if not config_path.is_file():
                 raise FileNotFoundError(f"config not found for checkpoint {ckpt_path}")
             config = load_config(config_path)

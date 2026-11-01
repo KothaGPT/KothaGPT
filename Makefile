@@ -100,6 +100,7 @@ train-smoke: data-tokenize-smoke | $(VENV)
 gpu-env: | $(VENV)
 	@echo "Installing training dependencies from ml/requirements.txt..."
 	@echo "CUDA-specific PyTorch wheels are selected by the host environment; no CI index is forced."
+	@$(PYTHON) -m pip --version >/dev/null 2>&1 || $(PYTHON) -m ensurepip --upgrade
 	$(PYTHON) -m pip install -r ml/requirements.txt
 
 gpu-verify: | $(VENV)
@@ -211,13 +212,17 @@ sft-smoke: | $(VENV)
 		--config ml/configs/smoke.yaml \
 		--device cpu --max-steps 1 --out ml/sft/artifacts/smoke
 
-# WS-3..WS-6: variant-aware SFT training via ml/sft (bn/en/multilingual/code)
-sft-train: | $(VENV)
+# WS-3..WS-6: train SFT from an explicit instruction dataset and base checkpoint.
+sft-train: gpu-env | $(VENV)
 	$(eval _SFT_CFG := $(if $(wildcard ml/configs/sft-$(variant).yaml),ml/configs/sft-$(variant).yaml,ml/configs/sft.yaml))
-	$(eval _TRAIN_DATA := $(or $(train_data),$(TRAIN_DATA),tests/fixtures/instruction.jsonl))
-	@test -f $(_TRAIN_DATA) || { echo "train data not found: $(_TRAIN_DATA)"; exit 1; }
-	$(PYTHON) -c "from ml.instruction.dataset import load_jsonl; recs=load_jsonl('$(_TRAIN_DATA)'); assert recs, 'no records'; print(f'sft-train: {len(recs)} records from $(_TRAIN_DATA)')"
-	$(PYTHON) -m ml.sft.cli --train $(_TRAIN_DATA) --tokenizer ml/tokenizer/artifacts/best --config $(_SFT_CFG) --max-steps 20 --out ml/sft/artifacts/$(or $(variant),run) $(if $(base),--base $(base))
+	$(eval _TRAIN_DATA := $(or $(train_data),$(TRAIN_DATA)))
+	$(eval _SFT_OUT := $(or $(out),ml/sft/artifacts/$(or $(variant),run)))
+	@test -n "$(_TRAIN_DATA)" || { echo "set train_data=/path/to/instruction.jsonl"; exit 2; }
+	@test -f "$(_TRAIN_DATA)" || { echo "train data not found: $(_TRAIN_DATA)"; exit 1; }
+	@test -n "$(base)" || { echo "set base=/path/to/pretrained/checkpoint.pt"; exit 2; }
+	@test -f "$(base)" || { echo "base checkpoint not found: $(base)"; exit 1; }
+	$(PYTHON) -c "from ml.instruction.dataset import load_jsonl; recs=load_jsonl('$(_TRAIN_DATA)'); print(f'sft-train: {len(recs)} records from $(_TRAIN_DATA)')"
+	$(PYTHON) -m ml.sft.cli --train "$(_TRAIN_DATA)" --tokenizer "$(or $(tokenizer),ml/tokenizer/artifacts/best)" --config "$(_SFT_CFG)" $(if $(steps),--max-steps $(steps)) --device $(or $(device),cpu) --out "$(_SFT_OUT)" --base "$(base)"
 
 sft-eval: | $(VENV)
 	$(PYTHON) -m evals.sft \
@@ -228,7 +233,7 @@ sft-eval: | $(VENV)
 SFT_FAMILIES := bn en multilingual code reasoning conversation fc tool-use
 SFT_EVAL_OUT ?= evals/results
 
-.PHONY: eval-sft eval-sft-ci
+.PHONY: eval-sft eval-sft-ci sft-train sft-gate sft-real
 eval-sft: | $(VENV)
 	@set -e; for family in $(SFT_FAMILIES); do \
 		$(PYTHON) -m evals.run \
@@ -237,8 +242,31 @@ eval-sft: | $(VENV)
 	done
 
 eval-sft-ci: | $(VENV)
-	$(PYTHON) -m pytest tests/test_sft_suites.py tests/test_sft_benchmarks.py -q
+	$(PYTHON) -m pytest tests/test_sft_suites.py tests/test_sft_benchmarks.py tests/test_sft_model_target.py -q
 	$(MAKE) eval-sft SFT_EVAL_OUT=/tmp/kothagpt-sft-evals
+
+sft-gate: gpu-env | $(VENV)
+	@test -n "$(base)" || { echo "set base=/path/to/pretrained/artifact"; exit 2; }
+	@test -n "$(candidate)" || { echo "set candidate=ml/sft/artifacts/run"; exit 2; }
+	$(PYTHON) -m evals.sft_gate \
+		--base "$(base)" --candidate "$(candidate)" \
+		--tokenizer "$(or $(tokenizer),ml/tokenizer/artifacts/best)" \
+		--device $(or $(device),cpu) --split $(or $(split),test) \
+		$(if $(eval_data),--data-dir "$(eval_data)") \
+		--out "$(or $(gate_out),evals/results/sft-model-gate.json)"
+
+sft-real:
+	@test -n "$(train_data)" || { echo "set train_data=/path/to/instruction.jsonl"; exit 2; }
+	@test -n "$(base)" || { echo "set base=/path/to/pretrained/checkpoint.pt"; exit 2; }
+	@test -n "$(eval_data)" || { echo "set eval_data=/path/to/held-out-sft-benchmarks"; exit 2; }
+	@test -d "$(eval_data)" || { echo "evaluation data directory not found: $(eval_data)"; exit 1; }
+	@for family in $(SFT_FAMILIES); do \
+		test -f "$(eval_data)/sft-$$family.jsonl" || { echo "missing evaluation set: $(eval_data)/sft-$$family.jsonl"; exit 1; }; \
+	done
+	$(MAKE) sft-train variant=$(variant) train_data="$(train_data)" base="$(base)" \
+		tokenizer="$(tokenizer)" device=$(device) steps=$(steps) out="$(or $(out),ml/sft/artifacts/$(or $(variant),run))"
+	$(MAKE) sft-gate base="$(base)" candidate="$(or $(out),ml/sft/artifacts/$(or $(variant),run))" \
+		tokenizer="$(tokenizer)" device=$(device) split=$(split) eval_data="$(eval_data)" gate_out="$(gate_out)"
 
 sft-benchmark-build:
 	$(PYTHON) -m data.benchmarks.sft

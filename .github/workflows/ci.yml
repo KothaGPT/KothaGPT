@@ -32,7 +32,7 @@ jobs:
         run: make tokenizer-bench
       - name: WS-9 Bangla evaluation (mock backend)
         run: make eval-bangla
-      - name: WS-11 SFT family evaluation gate
+      - name: SFT fixture harness and gate-logic smoke test
         run: make eval-sft-ci
 
   plans:

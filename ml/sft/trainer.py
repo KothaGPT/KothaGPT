@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import torch
@@ -25,6 +24,13 @@ def run_sft_trainer(
     max_length: int = 512,
     template: str = "default",
 ) -> dict[str, Any]:
+    if max_steps <= 0:
+        raise ValueError("max_steps must be positive")
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    if learning_rate <= 0:
+        raise ValueError("learning_rate must be positive")
+
     dataset = SFTDataset(records, tokenizer, max_length, template=template)
     pad_id = getattr(tokenizer, "vocab", {}).get("<pad>", 3)
     loader = DataLoader(
@@ -70,6 +76,8 @@ def run_sft_trainer(
         if not progressed:
             break
     avg_loss = total / max(steps, 1)
+    if steps == 0:
+        raise ValueError("SFT training produced no batches with supervised completion tokens")
     return {
         "steps": steps,
         "loss": avg_loss,
