@@ -1,0 +1,4 @@
+{"instruction": "What is 12 plus 8? Answer with the number only.", "output": "20", "language": "en", "category": "instruction", "metadata": {"record_id": "sft-en:001", "family": "sft-en", "split": "dev"}}
+{"instruction": "Name the capital of Japan.", "output": "Tokyo.", "language": "en", "category": "instruction", "metadata": {"record_id": "sft-en:002", "family": "sft-en", "split": "test"}}
+{"instruction": "Rewrite in the past tense: She walks to school.", "output": "She walked to school.", "language": "en", "category": "instruction", "metadata": {"record_id": "sft-en:003", "family": "sft-en", "split": "dev"}}
+{"instruction": "Give two examples of renewable energy.", "output": "Solar energy and wind energy.", "language": "en", "category": "instruction", "metadata": {"record_id": "sft-en:004", "family": "sft-en", "split": "dev"}}

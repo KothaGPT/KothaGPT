@@ -1,0 +1,2 @@
+{"task":"grounded_qa","record_id":"hallucination:bn:unsupported","family":"bn_factual","split":"dev","prompt":"প্রসঙ্গ অনুযায়ী ঢাকার অবস্থান কী?","context":"ঢাকা বাংলাদেশের রাজধানী।","reference":"ঢাকা বাংলাদেশের রাজধানী"}
+{"task":"grounded_qa","record_id":"hallucination:en:supported","family":"en_factual","split":"dev","prompt":"Where is Dhaka?","context":"Dhaka is the capital of Bangladesh.","reference":"Dhaka is the capital of Bangladesh."}

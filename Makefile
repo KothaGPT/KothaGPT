@@ -141,6 +141,12 @@ tokenizer-bench: | $(VENV)
 eval-bangla: | $(VENV)
 	$(PYTHON) -m evals.run --suite evals/suites/bangla.yaml
 
+eval-hallucination: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/hallucination.yaml \
+		--data-dir data/benchmarks/hallucination/v1 \
+		--name hallucination
+
 # Instruction tuning: validate records and run completion-only SFT.
 sft-smoke: | $(VENV)
 	$(PYTHON) -m ml.instruction.sft \
@@ -163,7 +169,23 @@ sft-eval: | $(VENV)
 		--predictions tests/fixtures/instruction.predictions.json \
 		--out evals/results/sft
 
-eval-sft: sft-eval
+SFT_FAMILIES := bn en multilingual code reasoning conversation fc tool-use
+SFT_EVAL_OUT ?= evals/results
+
+.PHONY: eval-sft eval-sft-ci
+eval-sft: | $(VENV)
+	@set -e; for family in $(SFT_FAMILIES); do \
+		$(PYTHON) -m evals.run \
+			--suite evals/suites/sft-$$family.yaml \
+			--split dev --out-dir "$(SFT_EVAL_OUT)" --name sft-$$family; \
+	done
+
+eval-sft-ci: | $(VENV)
+	$(PYTHON) -m pytest tests/test_sft_suites.py tests/test_sft_benchmarks.py -q
+	$(MAKE) eval-sft SFT_EVAL_OUT=/tmp/kothagpt-sft-evals
+
+sft-benchmark-build:
+	$(PYTHON) -m data.benchmarks.sft
 
 # Preference alignment smoke (WS-1/3)
 preference-smoke: | $(VENV)

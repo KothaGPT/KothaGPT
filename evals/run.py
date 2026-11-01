@@ -25,6 +25,8 @@ from typing import Any
 
 from .metrics import (
     bengali_script_ratio,
+    context_token_coverage,
+    context_unsupported_token_rate,
     exact_match,
     language_detection,
     mean_ci,
@@ -36,11 +38,55 @@ _RESULTS_DIR = Path(__file__).parent / "results"
 _DATA_DIR = Path(__file__).parent.parent / "data/benchmarks/bangla/v1"
 
 # Task -> callable(prediction, reference) -> dict[str, float]
+def _normalize_sft_answer(text: str) -> str:
+    return " ".join((text or "").strip().lower().split())
+
+
+def _sft_text_scorer(prediction: str, reference: str) -> dict[str, float]:
+    return {
+        "exact_match": 1.0 if prediction == reference else 0.0,
+        "normalized_match": (
+            1.0 if _normalize_sft_answer(prediction) == _normalize_sft_answer(reference) else 0.0
+        ),
+    }
+
+
+def _sft_structured_scorer(metric: str) -> Callable[[str, str], dict[str, float]]:
+    def score(prediction: str, reference: str) -> dict[str, float]:
+        try:
+            structured_match = json.loads(prediction) == json.loads(reference)
+        except (json.JSONDecodeError, TypeError):
+            structured_match = False
+        return {**_sft_text_scorer(prediction, reference), metric: float(structured_match)}
+
+    return score
+
+
+_SFT_TASKS = {
+    "sft-bn",
+    "sft-en",
+    "sft-multilingual",
+    "sft-code",
+    "sft-reasoning",
+    "sft-conversation",
+    "sft-fc",
+    "sft-tool-use",
+}
+
 _SCORERS: dict[str, Callable[[str, str], dict[str, float]]] = {
     "bangla_qa": lambda p, r: {"exact_match": exact_match(p, r)},
     "bangla_translation": lambda p, r: {**rouge(p, r), "exact_match": exact_match(p, r)},
     "bangla_summarization": lambda p, r: {**rouge(p, r)},
     "bangla_generation": lambda p, r: {},
+    "grounded_qa": lambda p, r: {},
+    "sft-bn": _sft_text_scorer,
+    "sft-en": _sft_text_scorer,
+    "sft-multilingual": _sft_text_scorer,
+    "sft-code": _sft_text_scorer,
+    "sft-reasoning": _sft_text_scorer,
+    "sft-conversation": _sft_text_scorer,
+    "sft-fc": _sft_structured_scorer("function_call_match"),
+    "sft-tool-use": _sft_structured_scorer("tool_call_match"),
 }
 
 
@@ -61,7 +107,7 @@ class MockTarget(Target):
     """Returns the gold reference; validates the harness end to end."""
 
     def generate(self, prompt: str, record: dict[str, Any]) -> str:
-        return record["reference"]
+        return record.get("reference", record.get("output", ""))
 
 
 class ApiTarget(Target):
@@ -82,6 +128,41 @@ class ApiTarget(Target):
         )
         response = self._backend.chat(request)
         return response.choices[0].message.content
+
+
+class PredictionsTarget(Target):
+    """Loads pre-generated responses keyed by benchmark record ID."""
+
+    def __init__(self, path: str | Path) -> None:
+        self._predictions: dict[str, str] = {}
+        with Path(path).open(encoding="utf-8") as fh:
+            for line_number, line in enumerate(fh, 1):
+                if not line.strip():
+                    continue
+                try:
+                    item = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"{path}:{line_number}: invalid JSON") from exc
+                if not isinstance(item, dict):
+                    raise TypeError(f"{path}:{line_number}: expected an object")
+                record_id = item.get("record_id")
+                prediction = item.get("prediction")
+                if not isinstance(record_id, str):
+                    raise TypeError(f"{path}:{line_number}: record_id must be a string")
+                if not record_id:
+                    raise ValueError(f"{path}:{line_number}: record_id must be a non-empty string")
+                if not isinstance(prediction, str):
+                    raise TypeError(f"{path}:{line_number}: prediction must be a string")
+                if record_id in self._predictions:
+                    raise ValueError(f"{path}:{line_number}: duplicate record_id {record_id!r}")
+                self._predictions[record_id] = prediction
+
+    def generate(self, prompt: str, record: dict[str, Any]) -> str:
+        record_id = record.get("record_id")
+        try:
+            return self._predictions[record_id]
+        except KeyError as exc:
+            raise ValueError(f"no prediction found for record_id {record_id!r}") from exc
 
 
 def _load_yaml_suite(path: Path) -> dict[str, Any]:
@@ -211,26 +292,80 @@ def _load_instances(task: str, data_dir: Path, split: str) -> list[dict[str, Any
             if not line:
                 continue
             record = json.loads(line)
-            if split == "all" or record.get("split") == split:
+            metadata = record.get("metadata")
+            metadata = metadata if isinstance(metadata, dict) else {}
+            record_split = record.get("split", metadata.get("split"))
+            if split == "all" or record_split == split:
+                record.setdefault("record_id", metadata.get("record_id"))
+                record.setdefault("family", metadata.get("family"))
+                if record_split is not None:
+                    record.setdefault("split", record_split)
                 records.append(record)
     return records
 
 
-def _score(prediction: str, record: dict[str, Any]) -> dict[str, float]:
-    task = record["task"]
+def _score(
+    prediction: str, record: dict[str, Any], task: str | None = None
+) -> dict[str, float]:
+    task = task or record["task"]
     scorer = _SCORERS[task]
-    return {**scorer(prediction, record.get("reference", "")), **_lang_metrics(prediction)}
+    reference = record.get("reference", record.get("output", ""))
+    scores = scorer(prediction, reference)
+    if task in _SFT_TASKS:
+        language = record.get("language")
+        if language in {"bn", "en"} and task not in {"sft-fc", "sft-tool-use"}:
+            scores["language_correct"] = float(language_detection(prediction) == language)
+            scores["bengali_script_ratio"] = bengali_script_ratio(prediction)
+    else:
+        scores.update(_lang_metrics(prediction))
+    if task == "grounded_qa":
+        context = record.get("context")
+        if not isinstance(context, str) or not context.strip():
+            raise ValueError(f"{record.get('record_id', task)} requires non-empty context")
+        scores["context_token_coverage"] = context_token_coverage(prediction, context)
+        scores["lexical_unsupported_token_rate"] = context_unsupported_token_rate(
+            prediction, context
+        )
+    return scores
+
+
+def _record_prompt(record: dict[str, Any]) -> str:
+    for field in ("prompt", "source_text", "source"):
+        if record.get(field):
+            return record[field]
+    messages = record.get("messages")
+    if isinstance(messages, list) and messages:
+        prompt_messages = messages
+        if messages[-1].get("role") == "assistant" and (
+            "output" in record or "reference" in record
+        ):
+            prompt_messages = messages[:-1]
+        return "\n".join(
+            f"<{message['role']}>\n{message['content']}"
+            for message in prompt_messages
+            if isinstance(message, dict)
+        ) + "\n<assistant>\n"
+    instruction = record.get("instruction", "")
+    input_text = record.get("input", "")
+    return f"{instruction}\n{input_text}".strip()
 
 
 def run_suite(
     suite_path: Path,
     *,
-    data_dir: Path = _DATA_DIR,
+    data_dir: Path | None = None,
     split: str = "all",
     target: Target | None = None,
 ) -> dict[str, Any]:
     suite = _load_yaml_suite(suite_path)
     _validate_suite(suite, suite_path)
+    if data_dir is None:
+        configured_data_dir = suite.get("data_dir")
+        data_dir = (
+            (suite_path.parent / configured_data_dir).resolve()
+            if configured_data_dir
+            else _DATA_DIR
+        )
     name = suite.get("name", "suite")
     target = target or MockTarget()
 
@@ -239,21 +374,24 @@ def run_suite(
         instances = _load_instances(task, data_dir, split)
         scored: list[dict[str, Any]] = []
         for record in instances:
-            prompt = record.get("prompt") or record.get("source_text") or record.get("source") or ""
+            prompt = _record_prompt(record)
             prediction = target.generate(prompt, record)
+            reference = record.get("reference", record.get("output", ""))
             scored.append(
                 {
                     "record_id": record["record_id"],
                     "split": record.get("split", "dev"),
+                    "family": record.get("family"),
                     "prediction": prediction,
-                    "reference": record.get("reference", ""),
-                    "scores": _score(prediction, record),
+                    "reference": reference,
+                    "scores": _score(prediction, record, task),
                 }
             )
         per_task[task] = scored
         print(f"  {task}: {len(instances)} instances")
 
     summary: dict[str, Any] = {}
+    families: dict[str, dict[str, Any]] = {}
     for task, scored in per_task.items():
         keys: set[str] = set()
         for item in scored:
@@ -263,6 +401,23 @@ def run_suite(
             values = [item["scores"][key] for item in scored]
             task_summary[key] = mean_ci(values)
         summary[task] = {"instances": len(scored), "metrics": task_summary}
+
+        family_groups: dict[str, list[dict[str, Any]]] = {}
+        for item in scored:
+            family = item.get("family")
+            if family:
+                family_groups.setdefault(family, []).append(item)
+        if family_groups:
+            families[task] = {}
+            for family, family_items in sorted(family_groups.items()):
+                family_keys = {key for item in family_items for key in item["scores"]}
+                families[task][family] = {
+                    "instances": len(family_items),
+                    "metrics": {
+                        key: mean_ci([item["scores"][key] for item in family_items])
+                        for key in sorted(family_keys)
+                    },
+                }
 
     per_category: dict[str, list[dict[str, Any]]] = {}
     categories = suite.get("categories") or {}
@@ -298,15 +453,50 @@ def run_suite(
         "split": split,
         "date": _dt.datetime.now(_dt.UTC).date().isoformat(),
         "summary": summary,
+        "families": families,
         "tasks": per_task,
         "cases": [item for scored in per_category.values() for item in scored],
         "cases_by_category": per_category,
     }
 
 
+def _compare_metric_summaries(
+    candidate: dict[str, Any], baseline: dict[str, Any]
+) -> dict[str, Any]:
+    comparison: dict[str, Any] = {}
+    for group in sorted(candidate.keys() & baseline.keys()):
+        candidate_metrics = candidate[group]["metrics"]
+        baseline_metrics = baseline[group]["metrics"]
+        metrics = {}
+        for metric in sorted(candidate_metrics.keys() & baseline_metrics.keys()):
+            candidate_mean = candidate_metrics[metric]["mean"]
+            baseline_mean = baseline_metrics[metric]["mean"]
+            metrics[metric] = {
+                "candidate_mean": candidate_mean,
+                "baseline_mean": baseline_mean,
+                "delta": candidate_mean - baseline_mean,
+            }
+        comparison[group] = {"instances": candidate[group]["instances"], "metrics": metrics}
+    return comparison
+
+
+def _compare_results(candidate: dict[str, Any], baseline: dict[str, Any]) -> dict[str, Any]:
+    candidate_families = candidate.get("families", {})
+    baseline_families = baseline.get("families", {})
+    families = {
+        task: _compare_metric_summaries(candidate_families[task], baseline_families[task])
+        for task in sorted(candidate_families.keys() & baseline_families.keys())
+    }
+    return {
+        "baseline_target": baseline["target"],
+        "tasks": _compare_metric_summaries(candidate["summary"], baseline["summary"]),
+        "families": families,
+    }
+
+
 def _render_report(results: dict[str, Any]) -> str:
     lines = [
-        "# Bangla Evaluation Report",
+        f"# {results['suite']} Evaluation Report",
         "",
         f"- **suite**: {results['suite']} v1",
         f"- **target**: {results['target']}",
@@ -327,6 +517,44 @@ def _render_report(results: dict[str, Any]) -> str:
                 f"[{ci['ci_low']:.4f}, {ci['ci_high']:.4f}] |"
             )
         lines.append("")
+    if results.get("families"):
+        lines.extend(["## Results by family", ""])
+        for task, family_groups in results["families"].items():
+            lines.append(f"### {task}")
+            lines.append("| family | instances | metric | mean | std | 95% CI |")
+            lines.append("| --- | ---: | --- | ---: | ---: | --- |")
+            for family, family_summary in family_groups.items():
+                for metric, ci in family_summary["metrics"].items():
+                    lines.append(
+                        f"| {family} | {family_summary['instances']} | {metric} | "
+                        f"{ci['mean']:.4f} | {ci['std']:.4f} | "
+                        f"[{ci['ci_low']:.4f}, {ci['ci_high']:.4f}] |"
+                    )
+            lines.append("")
+    comparison = results.get("comparison")
+    if comparison:
+        lines.extend(["## Comparison against baseline", ""])
+        for task, task_summary in comparison["tasks"].items():
+            lines.append(f"### {task}")
+            lines.append("| metric | candidate | baseline | delta |")
+            lines.append("| --- | ---: | ---: | ---: |")
+            for metric, values in task_summary["metrics"].items():
+                lines.append(
+                    f"| {metric} | {values['candidate_mean']:.4f} | "
+                    f"{values['baseline_mean']:.4f} | {values['delta']:+.4f} |"
+                )
+            lines.append("")
+        if comparison["families"]:
+            lines.extend(["### Family deltas", ""])
+            for task, family_groups in comparison["families"].items():
+                for family, family_summary in family_groups.items():
+                    for metric, values in family_summary["metrics"].items():
+                        lines.append(
+                            f"- {task}/{family} {metric}: "
+                            f"{values['candidate_mean']:.4f} vs {values['baseline_mean']:.4f} "
+                            f"(delta {values['delta']:+.4f})"
+                        )
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -334,19 +562,41 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", default=str(_SUITE_DIR / "bangla.yaml"))
     parser.add_argument("--split", choices=("dev", "test", "all"), default="all")
-    parser.add_argument("--target", choices=("mock", "api"), default="mock")
-    parser.add_argument("--data-dir", default=str(_DATA_DIR))
+    parser.add_argument("--target", choices=("mock", "api", "predictions"), default="mock")
+    parser.add_argument("--predictions", help="JSONL file with record_id and prediction fields")
+    parser.add_argument(
+        "--compare-predictions",
+        help="Optional baseline JSONL predictions to compare against the candidate",
+    )
+    parser.add_argument("--data-dir")
     parser.add_argument("--out-dir", default=str(_RESULTS_DIR))
     parser.add_argument("--name", default="bangla")
     args = parser.parse_args(argv)
 
-    target: Target = MockTarget() if args.target == "mock" else ApiTarget()
+    if args.target == "mock":
+        target: Target = MockTarget()
+    elif args.target == "api":
+        target = ApiTarget()
+    else:
+        if not args.predictions:
+            parser.error("--predictions is required when --target=predictions")
+        target = PredictionsTarget(args.predictions)
+    if args.compare_predictions and args.target != "predictions":
+        parser.error("--compare-predictions requires --target=predictions")
     results = run_suite(
         Path(args.suite),
-        data_dir=Path(args.data_dir),
+        data_dir=Path(args.data_dir) if args.data_dir else None,
         split=args.split,
         target=target,
     )
+    if args.compare_predictions:
+        baseline = run_suite(
+            Path(args.suite),
+            data_dir=Path(args.data_dir) if args.data_dir else None,
+            split=args.split,
+            target=PredictionsTarget(args.compare_predictions),
+        )
+        results["comparison"] = _compare_results(results, baseline)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

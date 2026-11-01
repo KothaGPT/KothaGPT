@@ -32,7 +32,7 @@ Guiding principles:
 | Preference package | `ml/preference/` exists but is empty | whole workstream missing |
 | Trainer core | `ml/trainer/` loop, checkpoint (atomic/resume), scheduler, monitor, DDP/FSDP, mixed precision | only causal-LM + SFT loss paths; no reward / DPO objectives |
 | Data pipeline | `data/pipeline/` gates + `data/pipeline/schema.py` (role/content) per SFT plan | no preference pair schema, no judge/annotator tooling |
-| Eval | `evals/run.py` + `evals/suites/` (bangla v1, sft* planned) | no preference/safety/hallucination/refusal suites |
+| Eval | `evals/run.py` + Bangla v1 and a partial WS-5 grounded-QA suite | preference/safety/refusal suites absent; WS-5 still lacks semantic consistency and model comparisons |
 | Configs | `ml/configs/small.yaml`, planned `sft*.yaml` | no reward/dpo configs |
 
 ---
@@ -106,6 +106,13 @@ Goal: measure whether alignment actually follows preference.
 ### WS-5 — Hallucination evaluation (`evals/suites/hallucination.yaml`)
 
 Goal: quantify groundedness so alignment improves factuality, not fluency.
+
+Current implementation (partial): the suite accepts externally generated
+predictions keyed by `record_id`, reports lexical context-token coverage and
+unsupported-token rate, and aggregates both overall and by optional `family`.
+This baseline does not establish semantic entailment and is not a release gate.
+Remaining work includes broader factual-consistency and open-ended probes,
+NLI-style scoring, and aligned-versus-SFT comparisons.
 
 - Build a hallucination suite: extraction/QA prompts with gold contexts
   (Bangla + English), factual-consistency prompts, and open-ended probes.

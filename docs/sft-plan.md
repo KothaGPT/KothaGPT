@@ -34,7 +34,7 @@ Guiding principles:
 | SFT package | `ml/sft/` exists but is empty | whole workstream missing |
 | Preference tuning | `ml/preference/` exists but is empty | out of scope (follow-up plan) |
 | Data pipeline | `data/pipeline/` normalize → quality → spam → toxic → PII → copyright → dedup → split → version; `data/synthetic/` + instruction shards (`data/processed/<ver>/instruction/`) planned in `docs/dataset-pipeline-plan.md` (A8) | no instruction shards produced yet; no role/content schema module |
-| Eval | `evals/run.py` + `evals/suites/bangla.yaml` (QA/translation/summarization/generation) + `evals/results/` reports | no SFT/chat eval, no instruction-following metrics, no base-vs-SFT comparisons |
+| Eval | Bangla suite plus partial WS-11 SFT family suites and exact/normalized/structured scorers in `evals/run.py` | generated model baselines and a release CI gate remain |
 | Tokenizer | frozen 16k BPE (`ml/tokenizer/artifacts/best/`, GPT-2-style `▁`) | no chat special tokens (e.g. `<&#124;im_start&#124;>`) verified in vocab |
 | Configs | `ml/configs/small.yaml` (model/training/data) | no SFT configs (sft.yaml, dataset mix, template) |
 
@@ -193,6 +193,12 @@ Goal: teach the model to call tools and integrate results into the answer.
 ### WS-11 — SFT evaluation
 
 Goal: a release gate that measures what tuning bought, per task family.
+
+Partial implementation: `evals/suites/sft-*.yaml` covers Bangla, English,
+multilingual, code, reasoning, conversation, function-call, and tool-use
+fixtures. `evals/run.py` scores exact/normalized completion matches and
+structured function/tool-call equality. Real-model prediction baselines and a
+CI release gate remain open.
 
 - Extend `evals/run.py` with an **SFT/chat mode**: instruct-formatted prompts,
   chat template, assistant-mask-aware scoring, plus a suite of IF metrics

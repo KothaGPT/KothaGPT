@@ -15,6 +15,8 @@ import unicodedata
 
 __all__ = [
     "bengali_script_ratio",
+    "context_token_coverage",
+    "context_unsupported_token_rate",
     "exact_match",
     "language_detection",
     "mean_ci",
@@ -60,6 +62,39 @@ def normalize_answer(text: str) -> str:
 
 def exact_match(prediction: str, reference: str) -> float:
     return 1.0 if normalize_answer(prediction) == normalize_answer(reference) else 0.0
+
+
+def _lexical_tokens(text: str) -> list[str]:
+    tokens: list[str] = []
+    current: list[str] = []
+    for char in normalize_answer(text):
+        if unicodedata.category(char)[0] in {"L", "M", "N"}:
+            current.append(char)
+        elif current:
+            tokens.append("".join(current))
+            current.clear()
+    if current:
+        tokens.append("".join(current))
+    return tokens
+
+
+def _context_token_counts(answer: str, context: str) -> tuple[int, int]:
+    answer_tokens = _lexical_tokens(answer)
+    context_tokens = set(_lexical_tokens(context))
+    matched = sum(token in context_tokens for token in answer_tokens)
+    return matched, len(answer_tokens)
+
+
+def context_token_coverage(answer: str, context: str) -> float:
+    """Fraction of answer tokens also present in context (lexical baseline only)."""
+    matched, total = _context_token_counts(answer, context)
+    return matched / total if total else 0.0
+
+
+def context_unsupported_token_rate(answer: str, context: str) -> float:
+    """Fraction of answer tokens absent from context (lexical baseline only)."""
+    matched, total = _context_token_counts(answer, context)
+    return (total - matched) / total if total else 0.0
 
 
 def _lcs(x: list[str], y: list[str]) -> int:
