@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ...core import backend_factory
 from ..auth import require_api_token
+from ..backend import get_active_backend
 from ..schemas import Agent, AgentRun, AgentRunRequest, AgentSpec
 
 router = APIRouter(
@@ -24,19 +24,19 @@ class AgentList(BaseModel):
 
 @router.get("", response_model=AgentList)
 def list_agents() -> AgentList:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     return AgentList(data=backend.list_agents())
 
 
 @router.post("", response_model=Agent, status_code=201)
 def create_agent(spec: AgentSpec) -> Agent:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     return backend.create_agent(spec)
 
 
 @router.get("/{agent_id}", response_model=Agent)
 def get_agent(agent_id: str) -> Agent:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     try:
         return backend.get_agent(agent_id)
     except KeyError as exc:
@@ -45,7 +45,7 @@ def get_agent(agent_id: str) -> Agent:
 
 @router.delete("/{agent_id}", status_code=204)
 def delete_agent(agent_id: str) -> None:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     try:
         backend.delete_agent(agent_id)
     except KeyError as exc:
@@ -54,13 +54,13 @@ def delete_agent(agent_id: str) -> None:
 
 @router.post("/{agent_id}/runs", response_model=AgentRun, status_code=201)
 def run_agent(agent_id: str, request: AgentRunRequest) -> AgentRun:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     return backend.run_agent(agent_id, request.message)
 
 
 @router.post("/{agent_id}/runs/stream")
 async def stream_agent(agent_id: str, request: AgentRunRequest) -> StreamingResponse:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     return StreamingResponse(
         _agent_sse(backend.run_agent_stream(agent_id, request.message)),
         media_type="text/event-stream",
@@ -70,7 +70,7 @@ async def stream_agent(agent_id: str, request: AgentRunRequest) -> StreamingResp
 
 @router.get("/{agent_id}/runs/{run_id}", response_model=AgentRun)
 def get_run(agent_id: str, run_id: str) -> AgentRun:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     try:
         run = backend.get_run(run_id)
     except KeyError as exc:

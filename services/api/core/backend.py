@@ -106,6 +106,10 @@ class Backend(ABC):
     def run_agent_stream(self, agent_id: str, message: str) -> AsyncIterator[dict[str, Any]]: ...
 
 
+class BackendUnavailableError(RuntimeError):
+    """Raised when a configured backend cannot serve inference requests."""
+
+
 class BackendFactory:
     """Builds the configured backend. Swap via KOTHAGPT_BACKEND env var."""
 

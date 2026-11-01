@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from services.api.app import app
 from services.api.core import backend_factory
-from services.api.core.config import RuntimeConfig, normalize_backend_name
+from services.api.core.config import RuntimeConfig
 from services.api.core.engine_backend import EngineBackend
 from services.api.core.example_backend import CannedBackend, HFExampleBackend
 from services.api.core.mock_backend import MockBackend
@@ -28,11 +28,31 @@ def test_health():
 
 def test_health_reports_production_status_only_for_engine(monkeypatch):
     monkeypatch.setenv("KOTHAGPT_BACKEND", "engine")
+    monkeypatch.delenv("KOTHAGPT_MODEL_CHECKPOINT", raising=False)
+    monkeypatch.delenv("KOTHAGPT_TOKENIZER_PATH", raising=False)
     response = client.get("/health")
     assert response.status_code == 200
     body = response.json()
     assert body["runtime"]["kind"] == "production"
     assert body["runtime"]["production"] is True
+    assert body["runtime"]["status"] == "not_configured"
+    assert body["status"] == "degraded"
+
+
+def test_engine_backend_without_artifacts_returns_service_unavailable(monkeypatch):
+    monkeypatch.setenv("KOTHAGPT_BACKEND", "engine")
+    monkeypatch.delenv("KOTHAGPT_MODEL_CHECKPOINT", raising=False)
+    monkeypatch.delenv("KOTHAGPT_TOKENIZER_PATH", raising=False)
+    response = client.post("/v1/chat", json={"message": "হ্যালো"})
+    assert response.status_code == 503
+    assert "no model was loaded" in response.json()["detail"].lower()
+
+
+def test_engine_backend_rejects_unimplemented_capabilities(monkeypatch):
+    monkeypatch.setenv("KOTHAGPT_BACKEND", "engine")
+    response = client.post("/v1/embeddings", json={"input": "হ্যালো"})
+    assert response.status_code == 501
+    assert "does not support 'embeddings'" in response.json()["detail"]
 
 
 def test_chat_default_mock_backend():
@@ -220,6 +240,29 @@ def test_real_backend_alias_registers_engine_backend(monkeypatch):
     monkeypatch.setenv("KOTHAGPT_BACKEND", "real")
     backend = backend_factory.create()
     assert isinstance(backend, EngineBackend)
+
+
+def test_engine_generation_failure_does_not_fall_back_to_mock(monkeypatch, tmp_path):
+    checkpoint = tmp_path / "model.pt"
+    checkpoint.touch()
+    tokenizer = tmp_path / "tokenizer.json"
+    tokenizer.touch()
+
+    class BrokenEngine:
+        def generate(self, prompt, max_new_tokens):
+            raise RuntimeError("model failed")
+
+    monkeypatch.setenv("KOTHAGPT_MODEL_CHECKPOINT", str(checkpoint))
+    monkeypatch.setenv("KOTHAGPT_TOKENIZER_PATH", str(tokenizer))
+    monkeypatch.setattr(EngineBackend, "_load_engine", lambda *args, **kwargs: BrokenEngine())
+    backend = EngineBackend()
+
+    from services.api.core.backend import BackendUnavailableError
+    from services.api.core.runtime_contract import RuntimeStatus
+
+    with pytest.raises(BackendUnavailableError, match="mock output is not used"):
+        backend.chat(_chat_request("পরীক্ষা"))
+    assert backend.runtime_status == RuntimeStatus.DEGRADED
 
 
 def _chat_request(message: str):

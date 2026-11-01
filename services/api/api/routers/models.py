@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from ...core import backend_factory
+from ...core.config import RuntimeConfig
 from ...core.runtime_contract import (
+    RuntimeContract,
     RuntimeKind,
-    RuntimeStatus,
     backend_metadata,
 )
 from ..schemas import BackendInfo, BackendList, ModelList
@@ -26,26 +27,22 @@ _AVAILABLE_FAMILIES = ["kothagpt", "kothagpt-small", "kothagpt-embed", "kothagpt
 def list_models() -> ModelList:
     from ..schemas import Model as APIModel
 
-    # Prefer registry if available (WS-9), fallback to backend mock for CI
+    # Prefer registry data; use the backend catalog only when the registry module is unavailable.
     if get_registry is not None:
-        try:
-            regs = {r.id: r for r in get_registry().list_models()}
-            data = []
-            for family in _AVAILABLE_FAMILIES:
-                rec = regs.get(family)
-                if rec is not None and rec.status != "research":
-                    data.append(
-                        APIModel(
-                            id=rec.id,
-                            description=rec.name,
-                            context_window=rec.context_window,
-                            status=rec.status,
-                        )
+        regs = {r.id: r for r in get_registry().list_models()}
+        data = []
+        for family in _AVAILABLE_FAMILIES:
+            rec = regs.get(family)
+            if rec is not None and rec.status != "research":
+                data.append(
+                    APIModel(
+                        id=rec.id,
+                        description=rec.name,
+                        context_window=rec.context_window,
+                        status=rec.status,
                     )
-            if data:
-                return ModelList(data=data)
-        except Exception:
-            pass
+                )
+        return ModelList(data=data)
     backend = backend_factory.create()
     return ModelList(data=backend.list_models())
 
@@ -56,8 +53,13 @@ def list_backends() -> BackendList:
     production status, so callers can distinguish a stub from a real runtime.
     """
     data: list[BackendInfo] = []
+    config = RuntimeConfig.from_env()
     for name, caps in backend_factory.describe().items():
         kind, status, notes = backend_metadata(name)
+        if name == config.backend:
+            contract = RuntimeContract.from_config(config, backend_factory.create(name))
+            status = contract.status
+            notes = contract.notes
         data.append(
             {
                 "name": name,
@@ -74,9 +76,8 @@ def list_backends() -> BackendList:
 @router.get("/runtime")
 def runtime_contract():
     """Explicit runtime contract for the active backend (KGPT-002)."""
-    from ...core.runtime_contract import RuntimeContract
-
-    contract = RuntimeContract.from_config()
+    config = RuntimeConfig.from_env()
+    contract = RuntimeContract.from_config(config, backend_factory.create(config.backend))
     return contract.as_dict()
 
 
@@ -89,14 +90,15 @@ def capability_check(capability: str):
     """
     from ...core.runtime_contract import capability_check as _check
 
-    backend = backend_factory.create()
+    config = RuntimeConfig.from_env()
+    backend = backend_factory.create(config.backend)
     supported = _check(backend, capability)
-    kind, status, notes = backend_metadata(None)
+    contract = RuntimeContract.from_config(config, backend)
     return {
         "capability": capability,
         "supported": supported,
-        "backend": backend_factory.create().__class__.__name__.lower().replace("backend", ""),
-        "kind": kind.value,
-        "status": status.value,
-        "notes": notes,
+        "backend": config.backend,
+        "kind": contract.kind.value,
+        "status": contract.status.value,
+        "notes": contract.notes,
     }

@@ -24,6 +24,7 @@ The API routes all inference through a pluggable backend, chosen with the
 | `mock` | `mock` (default) | deterministic mock reply (no deps) |
 | `canned` | `canned` | improved canned stub reply (no deps) |
 | `hf` | `hf` | generation from a tiny Hugging Face model |
+| `engine` | `engine` (or `real`) | trained checkpoint inference; unavailable until artifacts load |
 
 To use the `hf` example backend (requires optional deps, one-time):
 
@@ -95,9 +96,14 @@ tell a stub from a production model at a glance:
 | `engine` / `real` | `engine` | `production` | `true` | Torch-backed engine; requires a checkpoint + tokenizer |
 
 To serve real model traffic, set `KOTHAGPT_BACKEND=engine` and point
-`KOTHAGPT_MODEL_CHECKPOINT` and `KOTHAGPT_TOKENIZER_PATH` at a trained
-checkpoint. The health endpoint will report `production: true` only when the
-active backend is production-classified.
+`KOTHAGPT_MODEL_CHECKPOINT` and `KOTHAGPT_TOKENIZER_PATH` at existing trained
+artifacts. A config file alone is not a trained checkpoint. If either artifact
+is missing or fails to load, health reports `status: "degraded"` and chat
+requests return HTTP 503; the engine never substitutes mock output. The
+`production` flag identifies the backend class, while `status` reports whether
+its runtime is configured and ready. The current engine implements model-backed
+chat and streaming only; embedding, rerank, tools, and agents are reported as
+unsupported and return HTTP 501 rather than using the mock implementations.
 
 Additional introspection endpoints:
 

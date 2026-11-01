@@ -117,9 +117,19 @@ class RuntimeContract:
     max_new_tokens: int
 
     @classmethod
-    def from_config(cls, config: RuntimeConfig | None = None) -> "RuntimeContract":
+    def from_config(
+        cls,
+        config: RuntimeConfig | None = None,
+        backend: object | None = None,
+    ) -> RuntimeContract:
         config = config or RuntimeConfig.from_env()
         kind, status, notes = backend_metadata(config.backend)
+        backend_status = getattr(backend, "runtime_status", None)
+        backend_notes = getattr(backend, "runtime_notes", None)
+        if isinstance(backend_status, RuntimeStatus):
+            status = backend_status
+        if isinstance(backend_notes, str):
+            notes = backend_notes
         return cls(
             backend=config.backend,
             kind=kind,
@@ -152,7 +162,7 @@ class RuntimeContract:
         }
 
 
-def capability_check(backend: "Backend", capability: str) -> bool:
+def capability_check(backend: Backend, capability: str) -> bool:
     """Return whether ``backend`` exposes ``capability``.
 
     ``capability`` is one of: chat, streaming, embeddings, rerank, tools,
@@ -162,7 +172,7 @@ def capability_check(backend: "Backend", capability: str) -> bool:
     return bool(getattr(caps, capability, False))
 
 
-def require_capability(backend: "Backend", capability: str) -> None:
+def require_capability(backend: Backend, capability: str) -> None:
     """Raise ``RuntimeError`` if ``backend`` lacks ``capability``."""
     if not capability_check(backend, capability):
         raise RuntimeError(
