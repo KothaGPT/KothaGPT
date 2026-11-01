@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import torch
-import torch.nn as nn
+from torch import nn
+
 
 def quantize_model(model: nn.Module, bits: int = 8) -> nn.Module:
     """Fake 8-bit quantize for smoke: scale weights to int8 range and back."""

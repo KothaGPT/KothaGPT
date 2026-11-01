@@ -1,5 +1,7 @@
-from ml.inference.kv_cache import KVCache
 import torch
+
+from ml.inference.kv_cache import KVCache
+
 
 def test_kv_cache():
     c = KVCache(num_layers=2, n_heads=2, head_dim=4, max_seq=8)

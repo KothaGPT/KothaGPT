@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -156,7 +155,6 @@ def model_digest(cfg: BaseModelConfig | ModelConfig | dict) -> str:
 
 def load_config(path: str | Path) -> BaseModelConfig:
     from ml.tokenizer import load_tokenizer
-    from ml.tokenizer.base import BaseTokenizer
 
     path = Path(path)
     with open(path, "r") as f:
@@ -173,12 +171,12 @@ def load_config(path: str | Path) -> BaseModelConfig:
         try:
             tokenizer = load_tokenizer(tokenizer_path)
             model_data["vocab_size"] = len(tokenizer.vocab)
-        except Exception:
+        except Exception:  # noqa: BLE001
             try:
                 tok_data = json.loads(Path(tokenizer_path).read_text(encoding="utf-8"))
                 if "vocab" in tok_data and isinstance(tok_data["vocab"], dict):
                     model_data["vocab_size"] = len(tok_data["vocab"])
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
 
     cfg = BaseModelConfig(

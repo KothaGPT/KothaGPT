@@ -1,5 +1,6 @@
 from services.api.rate_limit import RateLimiter
 
+
 def test_rate_limit():
     rl = RateLimiter(max_requests=2, window_sec=60)
     assert rl.is_allowed("k1")[0]

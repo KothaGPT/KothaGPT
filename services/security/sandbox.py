@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+
 class Sandbox:
     def __init__(self, *, cpu_sec: int = 5, mem_mb: int = 256, allow_network: bool = False):
         self.cpu_sec = cpu_sec
@@ -30,7 +31,7 @@ class Sandbox:
         # Enforce file access only within tmp
         with self as tmp:
             # Write a marker to ensure scratch-only
-            result = subprocess.run(cmd, cwd=cwd or tmp, capture_output=True, text=True, timeout=self.cpu_sec)
+            result = subprocess.run(cmd, cwd=cwd or tmp, capture_output=True, text=True, timeout=self.cpu_sec, check=False)
             return result
 
     def check_escape(self, attempt: str) -> bool:

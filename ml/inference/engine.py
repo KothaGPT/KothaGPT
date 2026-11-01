@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 try:
     import torch
+
     from ml.models import KothaGPT, load_config
     from ml.tokenizer import load_tokenizer
 except ImportError:
@@ -39,7 +40,7 @@ class KothaGPTEngine:
                 self.device = device
                 self.model.to(device).eval()
                 return
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
         if checkpoint is None:

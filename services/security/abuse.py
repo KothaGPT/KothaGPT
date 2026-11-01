@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 
+
 class AbuseDetector:
     def __init__(self, burst_threshold: int = 20, window_sec: int = 60):
         self.burst_threshold = burst_threshold

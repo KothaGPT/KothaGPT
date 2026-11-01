@@ -45,7 +45,7 @@ class RuntimeConfig:
     tokenizer_path: str | None = None
 
     @classmethod
-    def from_env(cls, env: Mapping[str, str] | None = None) -> "RuntimeConfig":
+    def from_env(cls, env: Mapping[str, str] | None = None) -> RuntimeConfig:
         mapping = os.environ if env is None else dict(env)
         backend = (mapping.get("KOTHAGPT_BACKEND") or _DEFAULT_BACKEND).strip().lower()
         if not backend:

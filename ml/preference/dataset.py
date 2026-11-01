@@ -19,7 +19,7 @@ class PreferenceRecord:
     task_type: str = "instruction"
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "PreferenceRecord":
+    def from_dict(cls, raw: dict[str, Any]) -> PreferenceRecord:
         for k in ("prompt", "chosen", "rejected"):
             if not isinstance(raw.get(k), str) or not raw[k].strip():
                 raise ValueError(f"{k} must be non-empty string")

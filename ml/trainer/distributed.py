@@ -103,10 +103,9 @@ def wrap_model(
     if cfg.use_fsdp:
         if not device.startswith("cuda"):
             raise RuntimeError("FSDP requires CUDA; use DDP on CPU or add GPUs")
+        from ml.models.blocks import TransformerBlock
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
-
-        from ml.models.blocks import TransformerBlock
 
         wrap_policy = transformer_auto_wrap_policy(
             transformer_layer_cls={TransformerBlock},

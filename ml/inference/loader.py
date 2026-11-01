@@ -25,7 +25,7 @@ def _model_config_for_record(rec, artifact: Path):
     if cfg_path.is_file():
         try:
             return load_config(cfg_path)
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
     return type(

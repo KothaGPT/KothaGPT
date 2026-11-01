@@ -7,9 +7,10 @@ import json
 from pathlib import Path
 
 from ml.models import KothaGPT, load_config
-from ml.tokenizer import load_tokenizer
 from ml.preference.dataset import load_preference_jsonl
 from ml.preference.trainer import run_dpo
+from ml.tokenizer import load_tokenizer
+
 
 def main() -> None:
     p = argparse.ArgumentParser(description="DPO training")

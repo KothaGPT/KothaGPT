@@ -6,7 +6,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
-from data.manifest import DatasetRegistry, DatasetSource, LicenseAllowlist, get_registry
+from data.manifest import DatasetRegistry, get_registry
 from data.pipeline import (
     copyright,
     dedup,
@@ -20,7 +20,7 @@ from data.pipeline import (
     version,
 )
 
-__all__ = ["PipelineConfig", "run_pipeline", "enforce_source_provenance"]
+__all__ = ["PipelineConfig", "enforce_source_provenance", "run_pipeline"]
 
 
 @dataclass
@@ -106,7 +106,7 @@ def enforce_source_provenance(
     for record in records:
         source = record.get("source")
         if not source:
-            rejected.append(f"record missing 'source' field (no provenance)")
+            rejected.append("record missing 'source' field (no provenance)")
             continue
         ok, reason = registry.is_allowed(source)
         if not ok:

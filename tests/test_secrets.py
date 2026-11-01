@@ -1,5 +1,6 @@
 from services.security.secrets import SecretsManager, redact, scan_for_secrets
 
+
 def test_vault():
     m = SecretsManager()
     m.set("API_KEY", "secret123")

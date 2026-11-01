@@ -10,14 +10,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 __all__ = [
-    "DatasetSource",
     "DatasetRegistry",
+    "DatasetSource",
     "LicenseAllowlist",
     "get_registry",
     "load_registry",
@@ -77,7 +77,7 @@ class DatasetSource:
         if not self.license:
             raise ValueError("source license is required")
         if not self.collection_date:
-            self.collection_date = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            self.collection_date = datetime.now(UTC).isoformat(timespec="seconds")
 
     def digest(self) -> str:
         payload = json.dumps(asdict(self), sort_keys=True, ensure_ascii=False).encode("utf-8")

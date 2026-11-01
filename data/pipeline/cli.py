@@ -18,7 +18,6 @@ from pathlib import Path
 from data.manifest import (
     DatasetRegistry,
     DatasetSource,
-    LicenseAllowlist,
     get_registry,
     load_registry,
     save_registry,

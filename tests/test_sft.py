@@ -1,4 +1,5 @@
 import pytest
+
 from ml.sft.templates import apply_chat_template, check_tokenizer_coverage, parse_chat_template
 
 
@@ -10,7 +11,7 @@ def test_template_round_trip():
     ]
     for name in ["default", "kothagpt-bn", "kothagpt-en"]:
         text = apply_chat_template(msgs, template=name)
-        parsed = parse_chat_template(text, template=name)
+        parse_chat_template(text, template=name)
         # parse returns messages without trailing assistant prompt; we applied with 3 msgs including assistant, so apply adds extra assistant prefix
         # For this test use prompt-only messages
         prompt_msgs = msgs[:2]
@@ -22,7 +23,8 @@ def test_template_round_trip():
 def test_tokenizer_coverage(tmp_path):
     # fake tokenizer with encode
     class FakeTok:
-        vocab = {"<user>": 1, "<assistant>": 2, "<system>": 3, "<tool>": 4, "<eos>": 5, "<pad>": 6}
+        def __init__(self) -> None:
+            self.vocab = {"<user>": 1, "<assistant>": 2, "<system>": 3, "<tool>": 4, "<eos>": 5, "<pad>": 6}
 
         def encode(self, x):
             return [1]

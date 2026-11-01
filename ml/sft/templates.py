@@ -50,8 +50,7 @@ class ChatTemplate:
         if text.endswith("<assistant>\n"):
             text = text[: -len("<assistant>\n")]
             # Also remove the joiner that preceded it if present
-            if text.endswith("\n"):
-                text = text[:-1]
+            text = text.removesuffix("\n")
         import re
 
         pattern = r"(<system>\n|<user>\n|<assistant>\n|<tool>\n)"
@@ -109,11 +108,11 @@ def parse_chat_template(text: str, template: str = "default") -> list[dict[str, 
 
 def check_tokenizer_coverage(tokenizer, template: str = "default") -> dict[str, bool]:
     """Verify tokenizer covers all chat special tokens. Returns {token: covered}."""
-    vocab = getattr(tokenizer, "vocab", None) or getattr(tokenizer, "get_vocab", lambda: {})()
+    vocab = getattr(tokenizer, "vocab", None) or getattr(tokenizer, "get_vocab", dict)()
     if callable(vocab):
         try:
             vocab = vocab()
-        except Exception:
+        except Exception:  # noqa: BLE001
             vocab = {}
     unk_id = None
     if isinstance(vocab, dict):
@@ -127,13 +126,11 @@ def check_tokenizer_coverage(tokenizer, template: str = "default") -> dict[str, 
             try:
                 ids = tokenizer.encode(tok)
                 # Require exact vocab entry or single non-unk id
-                if len(ids) == 1 and (unk_id is None or ids[0] != unk_id):
-                    covered = True
-                elif len(ids) == 1 and tok in (getattr(tokenizer, "vocab", {}) or {}):
+                if len(ids) == 1 and (unk_id is None or ids[0] != unk_id) or len(ids) == 1 and tok in (getattr(tokenizer, "vocab", {}) or {}):
                     covered = True
                 else:
                     covered = False
-            except Exception:
+            except Exception:  # noqa: BLE001
                 covered = False
         coverage[tok] = covered
     return coverage

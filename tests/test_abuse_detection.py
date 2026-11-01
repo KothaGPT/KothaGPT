@@ -1,4 +1,6 @@
 from services.security.abuse import AbuseDetector
+
+
 def test_abuse():
     d = AbuseDetector(burst_threshold=3, window_sec=60)
     assert not d.record("t1")

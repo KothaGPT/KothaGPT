@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable
 import math
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from .chunk import Chunk
+
 
 @dataclass
 class StoredChunk:
@@ -27,17 +28,17 @@ class VectorStore:
             # ensure collection exists (tolerant)
             try:
                 self._client.get_collection(collection)
-            except Exception:
+            except Exception:  # noqa: BLE001 — collection may not exist yet
                 try:
                     self._client.create_collection(collection, vectors_config={"size": dim, "distance": "Cosine"})
-                except Exception:
+                except Exception:  # noqa: BLE001, S110
                     pass
-        except Exception:
+        except Exception:  # noqa: BLE001 — Qdrant unavailable; use in-memory fallback
             self._client = None
 
     def _embed(self, text: str) -> list[float]:
         # dependency-light hash embedding (same as MockBackend) for CI without model
-        import hashlib, math
+        import hashlib
         vec = []
         for i in range(self.dim):
             digest = hashlib.sha256(f"{i}:{text}".encode()).digest()
@@ -68,7 +69,7 @@ class VectorStore:
 
                 points = [PointStruct(id=self._stable_id(cid), vector=vec, payload=pay) for cid, vec, pay in vecs]
                 self._client.upsert(collection_name=self.collection, points=points)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
         return len(vecs)
 
@@ -100,17 +101,18 @@ class VectorStore:
                             start=int(payload.get("start", 0)),
                             end=int(payload.get("end", 0)),
                         )
-                    except Exception:
+                    except Exception:  # noqa: BLE001, S112
                         continue
                     seen.add(chunk.chunk_id)
                     results.append((chunk, float(getattr(h, "score", 0.0))))
                 results.sort(key=lambda x: -x[1])
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
         return results[:top_k]
 
     def snapshot(self, path: str) -> str:
-        import json, pathlib
+        import json
+        import pathlib
 
         p = pathlib.Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -131,7 +133,8 @@ class VectorStore:
         return str(p)
 
     def restore(self, path: str) -> int:
-        import json, pathlib
+        import json
+        import pathlib
 
         data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
         self._mem.clear()

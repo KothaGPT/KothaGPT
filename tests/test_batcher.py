@@ -1,10 +1,10 @@
 from ml.inference.batcher import Batcher, BatchItem
 
+
 class FakeEngine:
     def generate(self, prompt, max_new_tokens=3):
         # deterministic fake: yield chars of prompt
-        for c in prompt[:max_new_tokens]:
-            yield c
+        yield from prompt[:max_new_tokens]
 
 def test_batcher():
     e = FakeEngine()

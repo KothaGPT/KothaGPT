@@ -7,6 +7,7 @@ import hmac
 import json
 from pathlib import Path
 
+
 def sign_artifact(path: str | Path, key: bytes = b"test-key") -> str:
     data = Path(path).read_bytes()
     sig = hmac.new(key, data, hashlib.sha256).hexdigest()
@@ -24,5 +25,5 @@ def verify_artifact(path: str | Path, key: bytes = b"test-key") -> bool:
         data = p.read_bytes()
         expected = hmac.new(key, data, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, meta.get("hmac", ""))
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False

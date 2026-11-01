@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field
-from typing import Optional
-
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 from ml.models.config import ModelConfig
 
@@ -121,8 +117,8 @@ class Attention(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        cos: Optional[torch.Tensor] = None,
-        sin: Optional[torch.Tensor] = None,
+        cos: torch.Tensor | None = None,
+        sin: torch.Tensor | None = None,
     ) -> torch.Tensor:
         B, T, C = x.shape
         q = self.q_proj(x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
@@ -166,8 +162,8 @@ class TransformerBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        cos: Optional[torch.Tensor] = None,
-        sin: Optional[torch.Tensor] = None,
+        cos: torch.Tensor | None = None,
+        sin: torch.Tensor | None = None,
     ) -> torch.Tensor:
         h = x + self.attention(self.attention_norm(x), cos, sin)
         h = h + self.feed_forward(self.ffn_norm(h))
@@ -198,9 +194,9 @@ class KothaGPT(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        labels: Optional[torch.Tensor] = None,
+        labels: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
-        B, T = input_ids.shape
+        _, T = input_ids.shape
         hidden = self.embed_tokens(input_ids)
 
         cos, sin = self.layers[0].attention.rotary_emb(hidden, seq_len=T)

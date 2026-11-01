@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 _ALLOWED_QUANT_LEVELS = {"none", "int8", "int4", "bf16"}
 _ALLOWED_STATUSES = {"ready", "research", "deprecated", "offline"}
@@ -27,7 +26,7 @@ class ModelRecord:
 
     def __post_init__(self):
         if not self.created_at:
-            self.created_at = datetime.now(timezone.utc).isoformat()
+            self.created_at = datetime.now(UTC).isoformat()
         if not self.id or not self.name:
             raise ValueError("model id and name are required")
         if self.quant_level not in _ALLOWED_QUANT_LEVELS:
@@ -85,8 +84,7 @@ class ModelRegistry:
 
     def list_models(self) -> list[ModelRecord]:
         if self.url:
-            import sqlalchemy
-            from sqlalchemy import MetaData, Table, Column, String, select, create_engine
+            from sqlalchemy import Column, MetaData, String, Table, create_engine, select
 
             engine = create_engine(self.url)
             self._ensure_table(engine)
@@ -117,12 +115,13 @@ class ModelRegistry:
         rec = ModelRecord(**asdict(rec)) if isinstance(rec, ModelRecord) else ModelRecord(**rec)
         if self.url:
             import json
-            from sqlalchemy import MetaData, Table, Column, String, create_engine, text
+
+            from sqlalchemy import Column, MetaData, String, Table, create_engine, text
 
             engine = create_engine(self.url)
             self._ensure_table(engine)
             meta = MetaData()
-            tbl = Table(
+            Table(
                 "model_registry",
                 meta,
                 Column("id", String, primary_key=True),
@@ -140,7 +139,7 @@ class ModelRegistry:
                         ),
                         {"id": rec.id, "data": json.dumps(asdict(rec))},
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001
                     # Fallback for SQLite without ON CONFLICT support in older versions
                     conn.execute(text("DELETE FROM model_registry WHERE id = :id"), {"id": rec.id})
                     conn.execute(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import torch
 
+
 class KVCache:
     def __init__(self, num_layers: int, max_batch: int = 1, max_seq: int = 4096, n_heads: int = 4, head_dim: int = 32):
         self.num_layers = num_layers

@@ -1,4 +1,6 @@
 from services.security.audit import AuditLog
+
+
 def test_audit():
     log = AuditLog()
     log.log("alice", "read", "model", "allow")
