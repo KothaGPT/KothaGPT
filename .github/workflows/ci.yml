@@ -74,7 +74,7 @@ jobs:
           ./scripts/bootstrap.sh --dry-run --platform windows
       - name: Bootstrap gate tests
         run: |
-          pip install pytest
+          pip install pytest httpx
           python -m pytest tests/test_bootstrap.py
 
   test:
