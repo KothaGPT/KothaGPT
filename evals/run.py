@@ -30,7 +30,11 @@ from .metrics import (
     exact_match,
     language_detection,
     mean_ci,
+    preference_judge,
+    refusal_classifier,
     rouge,
+    semantic_contradiction,
+    semantic_entailment,
 )
 
 _SUITE_DIR = Path(__file__).parent / "suites"
@@ -61,7 +65,6 @@ def _sft_structured_scorer(metric: str) -> Callable[[str, str], dict[str, float]
 
     return score
 
-
 _SFT_TASKS = {
     "sft-bn",
     "sft-en",
@@ -73,12 +76,30 @@ _SFT_TASKS = {
     "sft-tool-use",
 }
 
-_SCORERS: dict[str, Callable[[str, str], dict[str, float]]] = {
+# WS-4 preference task: score a (chosen, rejected, reference) triple.
+def _preference_scorer(prediction: str, record: dict[str, Any]) -> dict[str, float]:
+    result = preference_judge(
+        record.get("chosen", ""), record.get("rejected", ""), record.get("reference", "")
+    )
+    return {
+        "win": result["win"],
+        "tie": result["tie"],
+        "lose": 1.0 - result["win"] - result["tie"],
+        "chosen_score": result["chosen_score"],
+        "rejected_score": result["rejected_score"],
+    }
+
+
+_preference_scorer._record_aware = True  # type: ignore[attr-defined]
+
+
+_SCORERS: dict[str, Callable[..., dict[str, float]]] = {
     "bangla_qa": lambda p, r: {"exact_match": exact_match(p, r)},
     "bangla_translation": lambda p, r: {**rouge(p, r), "exact_match": exact_match(p, r)},
     "bangla_summarization": lambda p, r: {**rouge(p, r)},
     "bangla_generation": lambda p, r: {},
     "grounded_qa": lambda p, r: {},
+    "preference": _preference_scorer,
     "sft-bn": _sft_text_scorer,
     "sft-en": _sft_text_scorer,
     "sft-multilingual": _sft_text_scorer,
@@ -178,6 +199,9 @@ _CASE_EXPECTATIONS: dict[str, set[str]] = {
     "sandbox": {"blocked", "allowed"},
     "auth": {"redacted", "allowed"},
     "poison": {"flagged", "allowed"},
+    "preference": {"win", "tie", "lose"},
+    "safety": {"refuse", "answer"},
+    "refusal": {"refuse", "answer", "partial"},
 }
 
 
@@ -249,7 +273,7 @@ def _validate_suite(suite: Any, path: Path) -> None:
             )
 
 
-def _case_outcome(control: str, text: str) -> str:
+def _case_outcome(control: str, text: str, record: dict[str, Any] | None = None) -> str:
     """Observe what the defensive control does with a case input."""
     if control == "injection":
         from services.security.injection import check_output, is_injection
@@ -278,6 +302,24 @@ def _case_outcome(control: str, text: str) -> str:
         from data.pipeline.security import is_poisoned
 
         return "flagged" if is_poisoned(text)[0] else "allowed"
+    if control == "preference":
+        # WS-4: rule-based preference judge on a (chosen, rejected, reference) triple.
+        if not record:
+            raise ValueError("preference control requires a case record")
+        result = preference_judge(
+            record.get("chosen", ""), record.get("rejected", ""), record.get("reference", "")
+        )
+        if result["win"] == 1.0:
+            return "win"
+        if result["tie"] == 1.0:
+            return "tie"
+        return "lose"
+    if control == "safety":
+        # WS-6: harmful prompts must be refused, benign prompts must be answered.
+        return refusal_classifier(text)
+    if control == "refusal":
+        # WS-9: three-way refusal classification (answer | refuse | partial).
+        return refusal_classifier(text)
     raise ValueError(f"unknown control {control!r}")
 
 
@@ -310,13 +352,17 @@ def _score(
     task = task or record["task"]
     scorer = _SCORERS[task]
     reference = record.get("reference", record.get("output", ""))
-    scores = scorer(prediction, reference)
+    # Record-aware scorers (e.g. preference) receive the full record.
+    if getattr(scorer, "_record_aware", False):
+        scores = scorer(prediction, record)
+    else:
+        scores = scorer(prediction, reference)
     if task in _SFT_TASKS:
         language = record.get("language")
         if language in {"bn", "en"} and task not in {"sft-fc", "sft-tool-use"}:
             scores["language_correct"] = float(language_detection(prediction) == language)
             scores["bengali_script_ratio"] = bengali_script_ratio(prediction)
-    else:
+    elif task != "preference":
         scores.update(_lang_metrics(prediction))
     if task == "grounded_qa":
         context = record.get("context")
@@ -326,6 +372,9 @@ def _score(
         scores["lexical_unsupported_token_rate"] = context_unsupported_token_rate(
             prediction, context
         )
+        # WS-5: semantic (lexical NLI proxy) consistency metrics.
+        scores["semantic_entailment"] = semantic_entailment(prediction, context)
+        scores["semantic_contradiction"] = semantic_contradiction(prediction, context)
     return scores
 
 
@@ -423,7 +472,7 @@ def run_suite(
     categories = suite.get("categories") or {}
     for case in suite.get("cases") or []:
         control = categories[case["category"]]["control"]
-        observed = _case_outcome(control, case["input"])
+        observed = _case_outcome(control, case["input"], case)
         passed = observed == case["expect"]
         result = {
             "id": case["id"],
@@ -435,6 +484,10 @@ def run_suite(
             "passed": passed,
             "status": "pass" if passed else "fail",
         }
+        # Carry record-aware fields (preference triple) through to the report.
+        for field in ("chosen", "rejected", "reference"):
+            if field in case:
+                result[field] = case[field]
         per_category.setdefault(case["category"], []).append(result)
 
     for category, scored in per_category.items():

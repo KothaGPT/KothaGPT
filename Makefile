@@ -147,6 +147,38 @@ eval-hallucination: | $(VENV)
 		--data-dir data/benchmarks/hallucination/v1 \
 		--name hallucination
 
+# WS-4 — Preference evaluation (rule-based judge on chosen/rejected/reference).
+eval-preference: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/preference.yaml \
+		--name preference
+
+# WS-5 — Semantic consistency (lexical NLI proxy) on grounded QA.
+eval-semantic: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/hallucination.yaml \
+		--data-dir data/benchmarks/hallucination/v1 \
+		--name semantic
+
+# WS-6 — Safety gate: harmful prompts refused, benign answered.
+eval-safety: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/safety.yaml \
+		--name safety
+
+# WS-9 — Calibrated refusal (answer | refuse | partial).
+eval-refusal: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/refusal.yaml \
+		--name refusal
+
+# WS-4..WS-9 — preference alignment eval battery.
+eval-alignment: | $(VENV)
+	$(MAKE) eval-preference
+	$(MAKE) eval-hallucination
+	$(MAKE) eval-safety
+	$(MAKE) eval-refusal
+
 # Instruction tuning: validate records and run completion-only SFT.
 sft-smoke: | $(VENV)
 	$(PYTHON) -m ml.instruction.sft \

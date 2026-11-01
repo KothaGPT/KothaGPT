@@ -5,3 +5,5 @@ tasks:
 metrics:
   - context_token_coverage
   - lexical_unsupported_token_rate
+  - semantic_entailment
+  - semantic_contradiction

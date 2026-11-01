@@ -104,6 +104,8 @@ Practical next steps (II–III done, IV in progress)
 - III. Add small `Makefile` targets for validation and quickserve (done).
 - IV. SFT/Preference/RAG/Runtime foundation (WS-2/3) — DONE: `ml/sft` templates/dataset/trainer, `ml/preference` DPO, `services/rag` ingest/store, `ml/inference` registry/engine; `make sft-smoke`, `make sft-train variant=bn`, `make preference-smoke`, `make rag-*-smoke` all green. Partial WS-11 SFT family suites/scorers are implemented; real-model baselines and CI gate remain. Next: WS-4 preference evaluation; WS-5 semantic consistency and broader probes; WS-6 safety/refusal suites; then scale & eval (long-context, multi-GPU) per `docs/pretraining-plan.md`.
 
+- V. WS-4/5/6/9 alignment eval suites — DONE: `evals/metrics.py` gains `preference_judge`, `refusal_classifier`, `semantic_entailment`, `semantic_contradiction`; `evals/suites/{preference,hallucination,safety,refusal}.yaml` all green via `make eval-{preference,hallucination,safety,refusal}`; `data/benchmarks/preference/v1/preference.jsonl` (7 triples); `tests/test_preference_suites.py` (14 tests). Next: WS-7 helpfulness suite, WS-8 bangla-quality suite, RM-guided win-rate replacing rule-based judge, then scale & eval (long-context, multi-GPU) per `docs/pretraining-plan.md`.
+
 Implementation plans (all linked from `docs/roadmap.md`)
 
 Master checklist: `docs/checklist.md` — every item auto-verified as covered by
