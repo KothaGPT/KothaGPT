@@ -5,6 +5,7 @@ Usage:
     python -m data.pipeline.cli normalize FILE
     python -m data.pipeline.cli check TEXT
     python -m data.pipeline.cli version
+    python -m data.pipeline.cli sources [list|check]
 """
 
 from __future__ import annotations
@@ -14,6 +15,14 @@ import json
 import sys
 from pathlib import Path
 
+from data.manifest import (
+    DatasetRegistry,
+    DatasetSource,
+    LicenseAllowlist,
+    get_registry,
+    load_registry,
+    save_registry,
+)
 from data.pipeline import normalize as norm
 from data.pipeline import quality
 from data.pipeline.config import PipelineConfig, run_pipeline
@@ -141,6 +150,28 @@ def _build_parser() -> argparse.ArgumentParser:
     version_p = sub.add_parser("version", help="Show the CURRENT dataset version.")
     version_p.add_argument("--out-root", default="data/processed")
 
+    sources_p = sub.add_parser(
+        "sources",
+        help="Manage the dataset provenance registry (KGPT-003).",
+    )
+    sources_sub = sources_p.add_subparsers(dest="sources_command", required=True)
+    sources_list = sources_sub.add_parser("list", help="List registered sources.")
+    sources_list.add_argument("--registry", default=None)
+    sources_check = sources_sub.add_parser("check", help="Check whether sources are allowed.")
+    sources_check.add_argument("--registry", default=None)
+    sources_check.add_argument(
+        "sources", nargs="*", help="source names to check"
+    )
+    sources_add = sources_sub.add_parser("add", help="Register a new source.")
+    sources_add.add_argument("--registry", default="data/processed/registry.json")
+    sources_add.add_argument("--name", required=True)
+    sources_add.add_argument("--url", required=True)
+    sources_add.add_argument("--license", required=True)
+    sources_add.add_argument("--provenance", default="")
+    sources_add.add_argument("--notes", default="")
+    sources_add.add_argument("--no-training", action="store_true")
+    sources_add.add_argument("--no-distribution", action="store_true")
+
     return parser
 
 
@@ -257,6 +288,59 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_sources(args: argparse.Namespace) -> int:
+    if args.sources_command == "list":
+        reg = load_registry(args.registry) if args.registry else get_registry()
+        sources = reg.list()
+        if not sources:
+            print("No sources registered.")
+            return 0
+        print(f"{len(sources)} source(s):")
+        for src in sources:
+            ok, reason = reg.is_allowed(src.name)
+            status = "ALLOWED" if ok else f"BLOCKED ({reason})"
+            print(
+                f"  {src.name:<24} license={src.license:<16} "
+                f"training={src.allow_training} {status}"
+            )
+        return 0
+
+    if args.sources_command == "check":
+        reg = load_registry(args.registry) if args.registry else get_registry()
+        if not args.sources:
+            print("no sources specified", file=sys.stderr)
+            return 1
+        failed = False
+        for name in args.sources:
+            ok, reason = reg.is_allowed(name)
+            print(f"{name}: {'OK' if ok else 'BLOCKED'} — {reason}")
+            if not ok:
+                failed = True
+        return 1 if failed else 0
+
+    if args.sources_command == "add":
+        reg = load_registry(args.registry) if args.registry else DatasetRegistry()
+        try:
+            src = DatasetSource(
+                name=args.name,
+                url=args.url,
+                license=args.license,
+                provenance=args.provenance,
+                notes=args.notes,
+                allow_training=not args.no_training,
+                allow_distribution=not args.no_distribution,
+            )
+            reg.register(src)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        out = save_registry(reg, args.registry)
+        print(f"registered {args.name} -> {out}")
+        return 0
+
+    raise AssertionError(f"unhandled sources command {args.sources_command}")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "run":
@@ -267,6 +351,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_check(args)
     if args.command == "version":
         return _cmd_version(args)
+    if args.command == "sources":
+        return _cmd_sources(args)
     raise AssertionError(f"unhandled command {args.command}")
 
 

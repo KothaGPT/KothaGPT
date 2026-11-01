@@ -64,6 +64,13 @@ data-validate: | $(VENV)
 	@echo "Running data validation checks..."
 	$(PYTHON) -m data.pipeline.cli version
 
+# KGPT-003: Dataset provenance registry management.
+dataset-registry: | $(VENV)
+	$(PYTHON) -m data.pipeline.cli sources list
+
+dataset-registry-check: | $(VENV)
+	$(PYTHON) -m data.pipeline.cli sources check $(SOURCES)
+
 # WS-1/WS-2: pre-tokenize the processed corpus into uint32 block shards so
 # training never re-tokenizes. Idempotent; run again to regenerate.
 data-tokenize: | $(VENV)
@@ -268,6 +275,16 @@ eval-sft-vs-base: | $(VENV)
 # Auto review & verify the implementation plans in docs/ (structure + links).
 plans-check: | $(VENV)
 	$(PYTHON) scripts/check_plans.py
+
+# KGPT-004: Release-grade benchmark gate. Compares a candidate eval result
+# against a frozen baseline and fails on critical regressions.
+eval-gate: | $(VENV)
+	$(PYTHON) -m evals.gate --candidate $(CANDIDATE) --baseline $(BASELINE) $(if $(JSON_OUT),--json-out $(JSON_OUT))
+
+# KGPT-001: Repository baseline validation — verifies the install path,
+# required files, tokenizer artifact, model registry, and Makefile targets.
+baseline: | $(VENV)
+	$(PYTHON) -m scripts.baseline
 
 # WS-1/WS-6: retrain on the normalized corpus and freeze tokenizer + vocab
 # (artifacts/best/, vocab/, DECISION.md). On real data use the target vocab

@@ -14,7 +14,25 @@ client = TestClient(app)
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    body = response.json()
+    assert body["status"] in ("ok", "degraded")
+    assert body["service"] == "kothagpt-api"
+    # KGPT-002: runtime contract is always surfaced, even on mock backends.
+    assert "runtime" in body
+    runtime = body["runtime"]
+    assert runtime["backend"] == "mock"
+    assert runtime["kind"] == "mock"
+    assert runtime["production"] is False
+    assert "not suitable for production" in runtime["notes"].lower()
+
+
+def test_health_reports_production_status_only_for_engine(monkeypatch):
+    monkeypatch.setenv("KOTHAGPT_BACKEND", "engine")
+    response = client.get("/health")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["runtime"]["kind"] == "production"
+    assert body["runtime"]["production"] is True
 
 
 def test_chat_default_mock_backend():
@@ -133,6 +151,60 @@ def test_backend_registry_endpoint_exposes_capabilities():
     assert payload["object"] == "list"
     assert any(item["name"] == "mock" for item in payload["data"])
     assert payload["data"][0]["capabilities"]["chat"] is True
+
+
+def test_backend_registry_endpoint_exposes_runtime_kind_and_status():
+    response = client.get("/v1/models/backends")
+    payload = response.json()
+    by_name = {item["name"]: item for item in payload["data"]}
+    mock_entry = by_name["mock"]
+    assert mock_entry["kind"] == "mock"
+    assert mock_entry["production"] is False
+    assert mock_entry["status"] == "ready"
+    engine_entry = by_name["engine"]
+    assert engine_entry["kind"] == "production"
+    assert engine_entry["production"] is True
+
+
+def test_runtime_contract_endpoint_exposes_snapshot():
+    response = client.get("/v1/models/runtime")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["backend"] == "mock"
+    assert payload["kind"] == "mock"
+    assert payload["production"] is False
+    assert payload["model_id"] == "kothagpt"
+
+
+def test_capability_check_endpoint_reports_support():
+    response = client.get("/v1/models/capability/chat")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["capability"] == "chat"
+    assert payload["supported"] is True
+    assert payload["kind"] == "mock"
+
+
+def test_runtime_contract_module_classifies_backends():
+    from services.api.core.runtime_contract import (
+        RuntimeKind,
+        RuntimeStatus,
+        backend_metadata,
+        is_production_backend,
+    )
+
+    kind, status, notes = backend_metadata("mock")
+    assert kind == RuntimeKind.MOCK
+    assert status == RuntimeStatus.READY
+    assert "not suitable for production" in notes.lower()
+    assert is_production_backend("mock") is False
+
+    kind, status, notes = backend_metadata("engine")
+    assert kind == RuntimeKind.PRODUCTION
+    assert is_production_backend("engine") is True
+
+    kind, _, _ = backend_metadata("does-not-exist")
+    assert kind == RuntimeKind.EXAMPLE
 
 
 def test_model_registry_reports_runtime_statuses():

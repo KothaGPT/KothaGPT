@@ -43,6 +43,10 @@ class BackendCapability(BaseModel):
 class BackendInfo(BaseModel):
     name: str
     capabilities: BackendCapability
+    kind: str = "example"
+    status: str = "not_configured"
+    production: bool = False
+    notes: str = ""
 
 
 class BackendList(BaseModel):

@@ -6,6 +6,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
+from data.manifest import DatasetRegistry, DatasetSource, LicenseAllowlist, get_registry
 from data.pipeline import (
     copyright,
     dedup,
@@ -19,7 +20,7 @@ from data.pipeline import (
     version,
 )
 
-__all__ = ["PipelineConfig", "run_pipeline"]
+__all__ = ["PipelineConfig", "run_pipeline", "enforce_source_provenance"]
 
 
 @dataclass
@@ -89,7 +90,33 @@ class PipelineConfig:
         return dataclasses.asdict(self)
 
 
-def run_pipeline(cfg: PipelineConfig) -> dict:
+def enforce_source_provenance(
+    records: list[dict], registry: DatasetRegistry | None = None
+) -> tuple[list[dict], list[str]]:
+    """Filter records to those whose ``source`` is registered and allowed.
+
+    Returns ``(kept, rejected_reasons)``. Records without a ``source`` field
+    are rejected unless the registry is empty (development mode).
+    """
+    registry = registry or get_registry()
+    if not registry.list():
+        return records, []
+    kept: list[dict] = []
+    rejected: list[str] = []
+    for record in records:
+        source = record.get("source")
+        if not source:
+            rejected.append(f"record missing 'source' field (no provenance)")
+            continue
+        ok, reason = registry.is_allowed(source)
+        if not ok:
+            rejected.append(f"{source}: {reason}")
+            continue
+        kept.append(record)
+    return kept, rejected
+
+
+def run_pipeline(cfg: PipelineConfig, registry: DatasetRegistry | None = None) -> dict:
     """Execute raw -> normalize -> filter -> dedup -> split -> version.
 
     Returns a summary dict with per-step counts and the emitted version.
@@ -108,9 +135,17 @@ def run_pipeline(cfg: PipelineConfig) -> dict:
         frozenset(cfg.license_allowlist) if cfg.license_allowlist else copyright.DEFAULT_ALLOWLIST
     )
 
+    # 0. Provenance gate (KGPT-003): reject records whose source is not
+    # registered and allowed. When no registry is configured, this is a no-op.
+    registry = registry or get_registry()
+    provenance_rejected: list[str] = []
+
     # 1. Read raw records.
     records = list(io.iter_records(source))
     summary["raw"] = len(records)
+    records, provenance_rejected = enforce_source_provenance(records, registry)
+    summary["after_provenance"] = len(records)
+    summary["provenance_rejected"] = provenance_rejected
 
     # 2. Normalize.
     normalized = []

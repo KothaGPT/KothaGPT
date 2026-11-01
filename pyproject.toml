@@ -41,6 +41,7 @@ entrypoint = "services.api.app:app"
 
 [project.scripts]
 kothagpt-doctor = "scripts.doctor:main"
+kothagpt-baseline = "scripts.baseline:main"
 
 [tool.ruff]
 line-length = 100

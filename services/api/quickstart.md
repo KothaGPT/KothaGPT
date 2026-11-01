@@ -81,3 +81,28 @@ curl -N -X POST \
   embeddings, rerank, tools, agents) without any model weights, so the whole
   API can be exercised in development and CI.
 - For development with auto-reload use `make dev`.
+
+## Runtime contract (KGPT-002)
+
+The `/health` endpoint always surfaces the active runtime contract so you can
+tell a stub from a production model at a glance:
+
+| Backend | `KOTHAGPT_BACKEND` | `kind` | `production` | Notes |
+| --- | --- | --- | --- | --- |
+| `mock` | `mock` (default) | `mock` | `false` | Deterministic stub; not for production traffic |
+| `canned` | `canned` | `example` | `false` | Improved canned stub; example/demo only |
+| `hf` | `hf` | `example` | `false` | Tiny HF example model; degrades to canned |
+| `engine` / `real` | `engine` | `production` | `true` | Torch-backed engine; requires a checkpoint + tokenizer |
+
+To serve real model traffic, set `KOTHAGPT_BACKEND=engine` and point
+`KOTHAGPT_MODEL_CHECKPOINT` and `KOTHAGPT_TOKENIZER_PATH` at a trained
+checkpoint. The health endpoint will report `production: true` only when the
+active backend is production-classified.
+
+Additional introspection endpoints:
+
+- `GET /v1/models/backends` — every registered backend with capabilities,
+  `kind`, `status`, and `production` flags.
+- `GET /v1/models/runtime` — the active runtime contract snapshot.
+- `GET /v1/models/capability/{name}` — whether the active backend supports a
+  capability (chat, streaming, embeddings, rerank, tools, agents, websocket).

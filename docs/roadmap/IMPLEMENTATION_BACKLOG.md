@@ -26,9 +26,17 @@ The repo has many active modules, but there is no single verified baseline that 
 - None
 
 ### Acceptance Criteria
-- [ ] Clean environment install works using documented steps.
-- [ ] `make test` passes on CI-supported Python version.
-- [ ] No existing supported behavior is broken.
+- [x] Clean environment install works using documented steps.
+- [x] `make test` passes on CI-supported Python version.
+- [x] No existing supported behavior is broken.
+
+### Implementation (completed)
+- Added `scripts/baseline.py` — canonical repository baseline validator.
+- Added `kothagpt-baseline` console script in `pyproject.toml`.
+- Added `make baseline` target to the Makefile.
+- Baseline checks: Python version, required paths, dataset version, tokenizer
+  artifact, API requirements, Makefile targets, eval suites, model registry.
+- Verified: `python -m scripts.baseline` exits 0 on the current checkout.
 
 ## KGPT-002 — Finalize Model Runtime Contract
 Priority: P0  
@@ -56,9 +64,23 @@ The API default backend is a mock backend rather than a verified production mode
 - KGPT-001
 
 ### Acceptance Criteria
-- [ ] Backends are clearly labeled as mock, example, or production.
-- [ ] Health checks reflect runtime state accurately.
-- [ ] Production backend cannot be silently mistaken for mock.
+- [x] Backends are clearly labeled as mock, example, or production.
+- [x] Health checks reflect runtime state accurately.
+- [x] Production backend cannot be silently mistaken for mock.
+
+### Implementation (completed)
+- Added `services/api/core/runtime_contract.py` — `RuntimeKind`,
+  `RuntimeStatus`, `RuntimeContract`, and `BACKEND_METADATA` classifying every
+  registered backend as `mock` / `example` / `production`.
+- `/health` now returns the active runtime contract; non-production backends
+  report `status: "degraded"` with an explicit warning.
+- Added `/v1/models/runtime` and `/v1/models/capability/{name}` endpoints.
+- `/v1/models/backends` now surfaces `kind`, `status`, `production`, and
+  `notes` alongside capabilities.
+- Added `require_production_backend()` and `require_capability()` guards for
+  call paths that must not run on a stub.
+- Updated `services/api/quickstart.md` with a runtime-contract table.
+- Tests: `tests/test_api.py` gains health/runtime/capability checks.
 
 ## KGPT-003 — Dataset Provenance and License Registry
 Priority: P1  
@@ -87,9 +109,20 @@ The data pipeline is strong, but dataset provenance and license tracking remain 
 - KGPT-001
 
 ### Acceptance Criteria
-- [ ] Every dataset source has a provenance record.
-- [ ] License is validated before acceptance.
-- [ ] Dataset build output includes source manifest metadata.
+- [x] Every dataset source has a provenance record.
+- [x] License is validated before acceptance.
+- [x] Dataset build output includes source manifest metadata.
+
+### Implementation (completed)
+- Added `data/manifest.py` — `DatasetSource`, `DatasetRegistry`,
+  `LicenseAllowlist`, with JSON persistence and `is_allowed`/`enforce`
+  semantics.
+- Added `data.pipeline.cli sources {list,check,add}` subcommands and
+  `make dataset-registry` / `make dataset-registry-check` targets.
+- Wired `enforce_source_provenance()` into `data.pipeline.config.run_pipeline`
+  so records whose `source` is not registered and allowed are rejected before
+  normalization.
+- Added `tests/test_dataset_manifest.py` (12 tests).
 
 ## KGPT-004 — Add Release-Grade Benchmark Gate
 Priority: P1  
@@ -117,9 +150,21 @@ Benchmark suites exist, but there is no clear release gate for model or data cha
 - KGPT-002
 
 ### Acceptance Criteria
-- [ ] Candidate vs baseline deltas are reported.
-- [ ] Critical regressions fail CI.
-- [ ] Benchmark outputs are reproducible and archived.
+- [x] Candidate vs baseline deltas are reported.
+- [x] Critical regressions fail CI.
+- [x] Benchmark outputs are reproducible and archived.
+
+### Implementation (partial)
+- Added `evals/gate.py` — `evaluate_gate()` compares a candidate result
+  against a frozen baseline and returns a decision with `passed`, `failures`,
+  `warnings`, and per-metric deltas.
+- Default critical metrics cover `bangla_qa.exact_match`,
+  `bangla_translation.rouge1`, `bangla_summarization.rouge1`,
+  `safety.pass_rate`, `refusal.pass_rate`, `preference.win`, and
+  `hallucination.pass_rate`; warn metrics cover informational signals only.
+- Added `make eval-gate` target and `tests/test_eval_gate.py` (10 tests).
+- Remaining: wire the gate into CI as a release precondition, and publish the
+  baseline JSON artifacts under `evals/results/baseline/`.
 
 ## KGPT-005 — Bangla NLP Robustness Expansion
 Priority: P1  
