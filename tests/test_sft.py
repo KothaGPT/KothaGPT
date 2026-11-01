@@ -53,3 +53,96 @@ def test_sft_trainer_smoke():
     metrics = run_sft_trainer(model, records[:4], tok, max_steps=2, batch_size=2, max_length=128)
     assert metrics["steps"] == 2
     assert metrics["loss"] > 0
+
+
+def test_sft_resume_restores_training_state(tmp_path):
+    torch = pytest.importorskip("torch")
+    from ml.instruction.dataset import load_jsonl
+    from ml.models import BaseModelConfig, DataConfig, KothaGPT, ModelConfig, TrainingConfig
+    from ml.sft.trainer import run_sft_trainer
+    from ml.tokenizer import train_bpe
+    from ml.trainer.checkpoint import latest_checkpoint, load_checkpoint
+
+    records_path = "tests/fixtures/instruction.jsonl"
+    records = load_jsonl(records_path)
+    tokenizer = train_bpe(
+        [f"{record.instruction} {record.output}" for record in records],
+        vocab_size=256,
+        min_frequency=1,
+    )
+    tokenizer_path = tokenizer.save(tmp_path / "tokenizer")
+    config = BaseModelConfig(
+        model=ModelConfig(
+            vocab_size=len(tokenizer.vocab),
+            hidden_size=16,
+            num_layers=1,
+            num_heads=2,
+            intermediate_size=32,
+            max_position_embeddings=32,
+        ),
+        training=TrainingConfig(
+            batch_size=1,
+            learning_rate=1e-3,
+            max_steps=4,
+            warmup_steps=0,
+            min_lr=1e-4,
+            save_interval=4,
+            mixed_precision="none",
+        ),
+        data=DataConfig(train=records_path, tokenizer_path=str(tokenizer_path)),
+    )
+    run_dir = tmp_path / "resumable"
+
+    torch.manual_seed(7)
+    resumed_model = KothaGPT(config.model)
+    first = run_sft_trainer(
+        resumed_model,
+        records,
+        tokenizer,
+        max_steps=2,
+        batch_size=1,
+        learning_rate=config.training.learning_rate,
+        max_length=24,
+        config=config,
+        out_dir=run_dir,
+    )
+    assert first["step"] == 2
+    checkpoint = load_checkpoint(latest_checkpoint(run_dir))
+    assert checkpoint["step"] == 2
+    assert checkpoint["optimizer_state"]["state"]
+    assert checkpoint["scheduler_state"]
+
+    resumed = run_sft_trainer(
+        resumed_model,
+        records,
+        tokenizer,
+        max_steps=4,
+        batch_size=1,
+        learning_rate=config.training.learning_rate,
+        max_length=24,
+        config=config,
+        out_dir=run_dir,
+        resume_from=run_dir,
+    )
+    assert resumed["steps"] == 2
+    assert resumed["step"] == 4
+    assert load_checkpoint(latest_checkpoint(run_dir))["step"] == 4
+
+    torch.manual_seed(7)
+    fresh_model = KothaGPT(config.model)
+    fresh = run_sft_trainer(
+        fresh_model,
+        records,
+        tokenizer,
+        max_steps=4,
+        batch_size=1,
+        learning_rate=config.training.learning_rate,
+        max_length=24,
+        config=config,
+        out_dir=tmp_path / "fresh",
+    )
+    assert fresh["step"] == 4
+    for resumed_parameter, fresh_parameter in zip(
+        resumed_model.parameters(), fresh_model.parameters()
+    ):
+        assert torch.equal(resumed_parameter, fresh_parameter)

@@ -30,8 +30,8 @@ Guiding principles:
 | Area | Exists | Gaps |
 | --- | --- | --- |
 | Base model | `ml/models/` full KothaGPT (embedding, attention, blocks, SwiGLU, RoPE, RMSNorm, output head) | no pretrained checkpoint is present in this checkout (pretraining WS-12 pending) |
-| Trainer core | `ml/trainer/` loop, checkpoint (atomic/resume), scheduler, monitor, DDP/FSDP, mixed precision | SFT still uses a simpler single-process loop rather than the resumable core |
-| SFT package | `ml/sft/` templates, assistant-masked dataset, trainer, and CLI; CLI writes inference-loadable checkpoints and provenance metadata | SFT loop does not yet reuse the full resumable trainer/checkpoint path |
+| Trainer core | `ml/trainer/` loop, checkpoint (atomic/resume), scheduler, monitor, DDP/FSDP, mixed precision | domain-specific dataset and run configuration remain the responsibility of each training entry point |
+| SFT package | `ml/sft/` templates, assistant-masked dataset, shared resumable trainer, and CLI; CLI writes inference-loadable checkpoints and provenance metadata | Larger curated instruction corpora and release artifacts remain to be supplied |
 | Preference tuning | `ml/preference/` DPO dataset and trainer | out of scope (follow-up plan) |
 | Data pipeline | `data/pipeline/` prose and instruction paths with normalization, provenance/license, safety, deduplication, scoring, splitting, and versioned shards | no production instruction corpus is checked in; supply curated/reviewed source JSONL |
 | Eval | SFT family suites, checkpoint-backed `model` target, and base-vs-SFT non-regression command (`make sft-gate`) | checked-in SFT v1 data is a tiny pipeline fixture, not a release benchmark; no real checkpoint/data is present |

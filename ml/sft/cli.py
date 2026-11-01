@@ -25,6 +25,7 @@ def main() -> None:
     parser.add_argument("--max-steps", type=int)
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--template", default="default")
+    parser.add_argument("--resume-from", help="SFT run directory containing resumable checkpoints")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -68,7 +69,7 @@ def main() -> None:
     out_dir = Path(args.out)
     checkpoint_dir = out_dir / "checkpoints"
     checkpoint_path = checkpoint_dir / "best.pt"
-    if base_path is not None and checkpoint_path.resolve() == base_path.resolve():
+    if base_path is not None and base_path.resolve().parent == checkpoint_dir.resolve():
         raise ValueError("SFT output would overwrite the base checkpoint; choose another --out")
 
     metrics = run_sft_trainer(
@@ -81,6 +82,9 @@ def main() -> None:
         learning_rate=config.training.learning_rate,
         max_length=config.model.max_position_embeddings,
         template=args.template,
+        config=config,
+        out_dir=out_dir,
+        resume_from=args.resume_from,
     )
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 

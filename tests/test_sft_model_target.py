@@ -53,6 +53,7 @@ def test_sft_cli_writes_checkpoint_loadable_by_model_target(tmp_path: Path, monk
     (base_dir / "config.json").write_text(json.dumps(training_config.to_dict()), encoding="utf-8")
     base_path = base_checkpoint_dir / "best.pt"
     torch.save({"model_state": KothaGPT(training_config.model).state_dict()}, base_path)
+    base_checkpoint_bytes = base_path.read_bytes()
     out_dir = tmp_path / "sft-run"
     monkeypatch.setattr(
         sys,
@@ -82,6 +83,7 @@ def test_sft_cli_writes_checkpoint_loadable_by_model_target(tmp_path: Path, monk
     assert (out_dir / "checkpoints" / "best.pt").is_file()
     metadata = json.loads((out_dir / "metadata.json").read_text())
     assert metadata["base_checkpoint_sha256"]
+    assert base_path.read_bytes() == base_checkpoint_bytes
     base_target = ModelTarget(base_path, tokenizer_path, max_new_tokens=2)
     assert isinstance(base_target.generate("<user>\nHi\n<assistant>\n", {}), str)
     target = ModelTarget(

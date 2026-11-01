@@ -2,14 +2,38 @@
 
 from __future__ import annotations
 
+import json
+import tempfile
+from contextlib import nullcontext
+from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 import torch
-from torch.utils.data import DataLoader
 
-from ml.instruction.dataset import InstructionCollator
-from ml.models import KothaGPT
+from ml.models import BaseModelConfig, DataConfig, KothaGPT, TrainingConfig
 from ml.sft.dataset import SFTDataset
+from ml.trainer.checkpoint import latest_checkpoint, step_of
+from ml.trainer.loop import train
+
+
+class _PaddedSFTDataset:
+    def __init__(self, dataset: SFTDataset, max_length: int, pad_id: int):
+        self.dataset = dataset
+        self.max_length = max_length
+        self.pad_id = pad_id
+
+    def __len__(self) -> int:
+        return len(self.dataset)
+
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
+        item = self.dataset[index]
+        input_ids = item["input_ids"][: self.max_length]
+        labels = item["labels"][: self.max_length]
+        padding = self.max_length - len(input_ids)
+        input_ids = input_ids + [self.pad_id] * padding
+        labels = labels + [-100] * padding
+        return torch.tensor(input_ids, dtype=torch.long), torch.tensor(labels, dtype=torch.long)
 
 
 def run_sft_trainer(
@@ -23,6 +47,9 @@ def run_sft_trainer(
     learning_rate: float = 3e-4,
     max_length: int = 512,
     template: str = "default",
+    config: BaseModelConfig | None = None,
+    out_dir: str | Path | None = None,
+    resume_from: str | Path | None = None,
 ) -> dict[str, Any]:
     if max_steps <= 0:
         raise ValueError("max_steps must be positive")
@@ -31,57 +58,73 @@ def run_sft_trainer(
     if learning_rate <= 0:
         raise ValueError("learning_rate must be positive")
 
-    dataset = SFTDataset(records, tokenizer, max_length, template=template)
     pad_id = getattr(tokenizer, "vocab", {}).get("<pad>", 3)
-    loader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        collate_fn=InstructionCollator(pad_id, max_length),
+    dataset = _PaddedSFTDataset(
+        SFTDataset(records, tokenizer, max_length, template=template), max_length, pad_id
     )
 
-    # Filter dataset to ensure every retained record has completion tokens within max_length
-    # (SFTDataset already raises for prompt-only, but collator could still produce all -100 if truncated)
-    def _has_completion(batch) -> bool:
-        labs = batch["labels"]
-        return (labs != -100).any().item()
+    if config is None:
+        training = TrainingConfig(
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            max_steps=max_steps,
+            warmup_steps=0,
+            min_lr=learning_rate / 10,
+            mixed_precision="none",
+        )
+        config = BaseModelConfig(
+            model=model.config,
+            training=training,
+            data=DataConfig(train="sft-records", tokenizer_path=""),
+        )
+    config = replace(
+        config,
+        training=replace(config.training, batch_size=batch_size, learning_rate=learning_rate),
+    )
 
-    model.to(device).train()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    steps, total = 0, 0.0
-    initial_loss = None
-    last_loss: float | None = None
-    while steps < max_steps:
-        progressed = False
-        for batch in loader:
-            if not _has_completion(batch):
-                continue
-            progressed = True
-            optimizer.zero_grad(set_to_none=True)
-            outputs = model(
-                input_ids=batch["input_ids"].to(device), labels=batch["labels"].to(device)
+    temporary_directory = tempfile.TemporaryDirectory() if out_dir is None else nullcontext(None)
+    with temporary_directory as temporary_path:
+        run_dir = Path(temporary_path) if temporary_path else Path(out_dir)
+        if not config.data.tokenizer_path:
+            tokenizer_path = tokenizer.save(run_dir / "tokenizer")
+            config = replace(
+                config,
+                data=replace(config.data, tokenizer_path=str(tokenizer_path.resolve())),
             )
-            loss = outputs["loss"]
-            if torch.isnan(loss) or torch.isinf(loss):
-                raise ValueError(f"non-finite loss at step {steps}: {loss.item()}")
-            if initial_loss is None:
-                initial_loss = float(loss.detach())
-            last_loss = float(loss.detach())
-            loss.backward()
-            optimizer.step()
-            total += last_loss
-            steps += 1
-            if steps >= max_steps:
-                break
-        if not progressed:
-            break
-    avg_loss = total / max(steps, 1)
-    if steps == 0:
-        raise ValueError("SFT training produced no batches with supervised completion tokens")
-    return {
-        "steps": steps,
-        "loss": avg_loss,
-        "initial_loss": initial_loss,
-        "final_loss": last_loss if last_loss is not None else avg_loss,
-        "mean_loss": avg_loss,
-    }
+
+        start_step = 0
+        if resume_from is not None:
+            checkpoint = latest_checkpoint(resume_from)
+            if checkpoint is not None:
+                start_step = step_of(checkpoint)
+
+        result = train(
+            model,
+            config,
+            dataset,
+            None,
+            out_dir=run_dir,
+            device=device,
+            max_steps=max_steps,
+            resume_from=resume_from,
+        )
+
+        history_path = run_dir / "history.jsonl"
+        losses = [
+            row["loss"]
+            for line in history_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+            for row in [json.loads(line)]
+            if row.get("step", 0) > start_step and "loss" in row
+        ]
+        if not losses:
+            raise ValueError("SFT training produced no batches with supervised completion tokens")
+        mean_loss = sum(losses) / len(losses)
+        return {
+            "steps": result["step"] - start_step,
+            "step": result["step"],
+            "loss": result["loss"],
+            "initial_loss": losses[0],
+            "final_loss": losses[-1],
+            "mean_loss": mean_loss,
+        }
