@@ -28,13 +28,15 @@ Guiding principles:
 
 | Area | Exists | Gaps |
 | --- | --- | --- |
-| Model tiering | `small.yaml` (768/12L), `long.yaml` (16k ctx), `smoke.yaml` (192/2/4), SFT configs (128/4L) | no formal tiering taxonomy; no Nano/Medium/Large configs |
-| Registry | `ModelRegistry` with `kothagpt`, `kothagpt-small`, `kothagpt-embed`, `kothagpt-rerank` | no tier fields, no MoE entries, no multimodal entries |
-| Architecture | decoder-only transformer (SwiGLU, RoPE, RMSNorm) | no MoE layer, no multimodal encoder, no reasoning-specific head |
+| Model tiering | `nano.yaml`, `small.yaml`, `medium.yaml`, and `large.yaml`; `ml/models/tier.py` maps all four tiers and defines parameter, context, device, quantization, cost, and latency metadata | tier dimensions and cost/latency values are configuration targets; no trained per-tier artifacts or all-tier model validation are checked in |
+| Registry | `ModelRegistry` seeds nano/small/medium/large and base/embed/rerank records; MoE is marked `research`; optional Postgres persistence is supported | tier defaults are catalog records with `ready` status but empty `artifact_path` and `digest`; the API model list intentionally excludes nano, medium, and large |
+| Architecture | Dense decoder plus prototype MoE layers/router, vision/audio/document encoders and unified wrapper, and an optional reasoning head | these modules are not evidence of production-trained capability; MoE quality/compute comparisons and production multimodal backbones/integration remain open |
 | Trainer | `ml/trainer/` loop, checkpoint, scheduler, monitor, DDP/FSDP | no tier-aware training, no MoE training recipe |
 | SFT | `ml/sft/` with bn/en/multilingual/code variants | no reasoning/coding-specialist SFT pipeline, no tier-specific SFT |
-| Eval | `evals/` with general, bangla, english, coding, reasoning, math, RAG, agent, hallucination, safety, latency, token-efficiency | no tier-specific eval gates, no adversarial suite, no MoE eval |
-| Inference | `ml/inference/` engine, KV cache, batcher, quant, loader, registry, version | no tier-aware router, no MoE inference engine, no multimodal decoder |
+| Eval | `evals/` includes general and task suites, four tier suites, `evals/tier_gate.py`, and an adversarial suite | checked-in tier gate tests use gold responses with `MockTarget`; no model-backed per-tier baseline or MoE evaluation evidence is checked in |
+| Inference | `ml/inference/` engine, KV cache, batcher, quantization, loader, registry, and a `ModelRouter` task-class mapping with a static escalation chain | the router is not wired into the API, ignores its config file and most complexity signals, and does not route from measured quality or model availability; no MoE inference engine |
+
+Status evidence: `tests/test_model_loader.py` covers the `kothagpt-small` loader alias, and `tests/test_api.py` covers runtime model-ID and API model-list contracts. `tests/test_tier_gate.py` exercises tier suites and gate behavior with mock/gold responses, not trained tier checkpoints. There are no direct tests for `ModelRouter` or the tier defaults in `ModelRegistry`; configuration, routing, and registry entries therefore describe implemented scaffolding, not verified production capability.
 
 ---
 
