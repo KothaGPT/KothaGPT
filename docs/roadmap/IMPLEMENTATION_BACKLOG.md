@@ -192,9 +192,12 @@ The repo handles core normalization and transliteration, but dialect, code-switc
 - KGPT-003
 
 ### Acceptance Criteria
-- [ ] Mixed-script and transliterated inputs are benchmarked.
-- [ ] Real-world Bangla noise cases are explicitly represented in tests.
-- [ ] Dialect metadata is part of the dataset schema.
+- [x] Mixed-script and transliterated inputs are benchmarked in
+  `evals/suites/bangla-robustness.yaml`.
+- [x] Colloquial and noisy Bangla cases are represented in deterministic
+  benchmark fixtures and tests.
+- [x] Dialect, region, script pattern, phenomena, and domain metadata are part
+  of the robustness record schema.
 
 ## KGPT-006 — Security Policy and Model Provenance
 Priority: P1  

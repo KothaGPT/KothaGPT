@@ -152,6 +152,12 @@ tokenizer-bench: | $(VENV)
 eval-bangla: | $(VENV)
 	$(PYTHON) -m evals.run --suite evals/suites/bangla.yaml
 
+# KGPT-005: dialect, code-switching, transliteration, and noisy-input coverage.
+eval-bangla-robustness: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/bangla-robustness.yaml \
+		--split all --name bangla-robustness
+
 eval-hallucination: | $(VENV)
 	$(PYTHON) -m evals.run \
 		--suite evals/suites/hallucination.yaml \

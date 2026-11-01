@@ -101,6 +101,7 @@ _SCORERS: dict[str, Callable[..., dict[str, float]]] = {
     "bangla_qa": lambda p, r: {"exact_match": exact_match(p, r)},
     "bangla_translation": lambda p, r: {**rouge(p, r), "exact_match": exact_match(p, r)},
     "bangla_summarization": lambda p, r: {**rouge(p, r)},
+    "bangla_robustness": lambda p, r: {**rouge(p, r)},
     "bangla_generation": lambda p, r: {},
     "grounded_qa": lambda p, r: {},
     "preference": _preference_scorer,

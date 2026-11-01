@@ -1,0 +1,11 @@
+name: bangla-robustness
+version: v1
+data_dir: ../../data/benchmarks/bangla/v1
+tasks:
+  - bangla_robustness
+instances:
+  bangla_robustness: 24
+metrics:
+  - rouge
+  - language_detection
+  - bengali_script_ratio

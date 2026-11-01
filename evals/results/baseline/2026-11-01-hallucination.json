@@ -1,0 +1,171 @@
+{
+  "suite": "Bangla Hallucination",
+  "target": "mock",
+  "split": "all",
+  "date": "2026-11-01",
+  "summary": {
+    "grounded_qa": {
+      "instances": 2,
+      "metrics": {
+        "bengali_script_ratio": {
+          "mean": 0.5,
+          "std": 0.7071067811865476,
+          "ci_low": -0.48,
+          "ci_high": 1.48
+        },
+        "context_token_coverage": {
+          "mean": 1.0,
+          "std": 0.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "language_correct": {
+          "mean": 0.5,
+          "std": 0.7071067811865476,
+          "ci_low": -0.48,
+          "ci_high": 1.48
+        },
+        "lexical_unsupported_token_rate": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0
+        },
+        "semantic_contradiction": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0
+        },
+        "semantic_entailment": {
+          "mean": 1.0,
+          "std": 0.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        }
+      }
+    }
+  },
+  "families": {
+    "grounded_qa": {
+      "bn_factual": {
+        "instances": 1,
+        "metrics": {
+          "bengali_script_ratio": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "context_token_coverage": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "language_correct": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "lexical_unsupported_token_rate": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "semantic_contradiction": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "semantic_entailment": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          }
+        }
+      },
+      "en_factual": {
+        "instances": 1,
+        "metrics": {
+          "bengali_script_ratio": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "context_token_coverage": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "language_correct": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "lexical_unsupported_token_rate": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "semantic_contradiction": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "semantic_entailment": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          }
+        }
+      }
+    }
+  },
+  "tasks": {
+    "grounded_qa": [
+      {
+        "record_id": "hallucination:bn:unsupported",
+        "split": "dev",
+        "family": "bn_factual",
+        "prediction": "ঢাকা বাংলাদেশের রাজধানী",
+        "reference": "ঢাকা বাংলাদেশের রাজধানী",
+        "scores": {
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0,
+          "context_token_coverage": 1.0,
+          "lexical_unsupported_token_rate": 0.0,
+          "semantic_entailment": 1.0,
+          "semantic_contradiction": 0.0
+        }
+      },
+      {
+        "record_id": "hallucination:en:supported",
+        "split": "dev",
+        "family": "en_factual",
+        "prediction": "Dhaka is the capital of Bangladesh.",
+        "reference": "Dhaka is the capital of Bangladesh.",
+        "scores": {
+          "bengali_script_ratio": 0.0,
+          "language_correct": 0.0,
+          "context_token_coverage": 1.0,
+          "lexical_unsupported_token_rate": 0.0,
+          "semantic_entailment": 1.0,
+          "semantic_contradiction": 0.0
+        }
+      }
+    ]
+  },
+  "cases": [],
+  "cases_by_category": {}
+}

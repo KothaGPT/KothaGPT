@@ -18,7 +18,11 @@ Standardize the dataset schema so records are consistent, auditable, and fit for
   "metadata": {
     "license": "verified-license",
     "quality_score": null,
-    "review_status": "pending"
+    "review_status": "pending",
+    "region": "bn-BD",
+    "script_pattern": "bn_en",
+    "phenomena": ["code_switching"],
+    "family": "code_switched"
   }
 }
 ```
@@ -37,6 +41,13 @@ Standardize the dataset schema so records are consistent, auditable, and fit for
 ## Additional fields recommended
 
 - `domain`
+- `region`: locale or reviewed regional variety (for example `bn-BD`)
+- `script_pattern`: dominant input-script pattern (for example `bn`, `bn_en`,
+  `latin_bn`, or corresponding `*_noisy` patterns)
+- `phenomena`: one or more robustness tags such as `code_switching`,
+  `transliteration`, or `repeated_punctuation`
+- `family`: benchmark grouping such as `formal`, `colloquial`,
+  `code_switched`, or `transliterated`
 - `quality_flags`
 - `pii_detected`
 - `split`
@@ -59,3 +70,9 @@ Each record should support:
 ## Implementation guidance
 
 The project’s current `data/pipeline` design is compatible with this schema direction. The key gap is metadata discipline rather than transformation logic.
+
+The KGPT-005 Bangla robustness fixtures implement this taxonomy in
+`data/benchmarks/bangla/v1/bangla_robustness.jsonl`. Their `dialect` values
+distinguish standard from colloquial register; the initial fixtures use the
+`bn-BD` locale and do not claim coverage of individually verified regional
+dialects. Native-speaker review is required before making that claim.

@@ -32,8 +32,54 @@ jobs:
         run: make tokenizer-bench
       - name: WS-9 Bangla evaluation (mock backend)
         run: make eval-bangla
+      - name: KGPT-005 Bangla robustness evaluation
+        run: make eval-bangla-robustness
       - name: SFT fixture harness and gate-logic smoke test
         run: make eval-sft-ci
+
+  release-eval-gate:
+    name: KGPT-004 Release evaluation gate
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install evaluation dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r services/api/requirements.txt
+      - name: Run release evaluation suites
+        run: |
+          eval_dir="$RUNNER_TEMP/release-evals"
+          mkdir -p "$eval_dir"
+          .venv/bin/python -m evals.run \
+            --suite evals/suites/bangla.yaml --split all \
+            --out-dir "$eval_dir" --name bangla
+          .venv/bin/python -m evals.run \
+            --suite evals/suites/bangla-robustness.yaml --split all \
+            --out-dir "$eval_dir" --name bangla-robustness
+          .venv/bin/python -m evals.run \
+            --suite evals/suites/safety.yaml --split all \
+            --out-dir "$eval_dir" --name safety
+          .venv/bin/python -m evals.run \
+            --suite evals/suites/refusal.yaml --split all \
+            --out-dir "$eval_dir" --name refusal
+          .venv/bin/python -m evals.run \
+            --suite evals/suites/preference.yaml --split all \
+            --out-dir "$eval_dir" --name preference
+          .venv/bin/python -m evals.run \
+            --suite evals/suites/hallucination.yaml \
+            --data-dir data/benchmarks/hallucination/v1 --split all \
+            --out-dir "$eval_dir" --name hallucination
+      - name: Compare against KGPT-004 baselines
+        run: |
+          .venv/bin/python -m evals.gate \
+            --candidate "$RUNNER_TEMP"/release-evals/*.json \
+            --baseline evals/results/baseline/*.json \
+            --json-out "$RUNNER_TEMP/eval-gate.json"
 
   plans:
     name: Implementation plan review & verify

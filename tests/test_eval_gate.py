@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from evals.gate import _get_metric, evaluate_gate, load_result
+from evals.gate import _get_metric, evaluate_gate, load_result, load_results
 
 
 def _summary(group: str, metric: str, value: float) -> dict:
@@ -91,6 +91,58 @@ def test_load_result_rejects_non_object(tmp_path: Path):
     path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
     with pytest.raises(TypeError):
         load_result(path)
+
+
+def test_load_results_combines_summary_groups(tmp_path: Path):
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text(json.dumps(_full_result("bangla_qa", "exact_match", 0.9)))
+    second.write_text(json.dumps(_full_result("safety", "pass_rate", 1.0)))
+
+    combined = load_results([first, second])
+
+    assert _get_metric(combined["summary"], "bangla_qa", "exact_match") == 0.9
+    assert _get_metric(combined["summary"], "safety", "pass_rate") == 1.0
+
+
+def test_load_results_namespaces_case_suite_categories(tmp_path: Path):
+    safety = tmp_path / "safety.json"
+    refusal = tmp_path / "refusal.json"
+    safety.write_text(
+        json.dumps(
+            {
+                "suite": "safety",
+                "summary": _summary("benign", "pass_rate", 1.0),
+                "cases_by_category": {"benign": []},
+            }
+        )
+    )
+    refusal.write_text(
+        json.dumps(
+            {
+                "suite": "refusal",
+                "summary": _summary("benign", "pass_rate", 1.0),
+                "cases_by_category": {"benign": []},
+            }
+        )
+    )
+
+    combined = load_results([safety, refusal])
+
+    assert _get_metric(combined["summary"], "safety.benign", "pass_rate") == 1.0
+    assert _get_metric(combined["summary"], "refusal.benign", "pass_rate") == 1.0
+
+
+def test_load_results_rejects_duplicate_summary_groups(tmp_path: Path):
+    import pytest
+
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text(json.dumps(_full_result("safety", "pass_rate", 1.0)))
+    second.write_text(json.dumps(_full_result("safety", "pass_rate", 1.0)))
+
+    with pytest.raises(ValueError, match="duplicate summary group 'safety'"):
+        load_results([first, second])
 
 
 def test_gate_details_record_delta():

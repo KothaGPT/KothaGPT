@@ -21,6 +21,7 @@ from evals.run import MockTarget, PredictionsTarget, main, run_suite
 
 SUITE = Path(__file__).parent.parent / "evals/suites/bangla.yaml"
 DATA = Path(__file__).parent.parent / "data/benchmarks/bangla/v1"
+ROBUSTNESS_SUITE = Path(__file__).parent.parent / "evals/suites/bangla-robustness.yaml"
 HALLUCINATION_SUITE = Path(__file__).parent.parent / "evals/suites/hallucination.yaml"
 HALLUCINATION_DATA = Path(__file__).parent.parent / "data/benchmarks/hallucination/v1"
 
@@ -119,6 +120,21 @@ def test_translation_rouge_is_perfect_under_mock():
     results = run_suite(SUITE, data_dir=DATA, split="dev", target=MockTarget())
     r1 = results["summary"]["bangla_translation"]["metrics"]["rouge1"]
     assert r1["mean"] == 1.0
+
+
+def test_robustness_suite_reports_metrics_by_input_family():
+    results = run_suite(ROBUSTNESS_SUITE, split="all", target=MockTarget())
+    summary = results["summary"]["bangla_robustness"]
+    assert summary["instances"] == 24
+    assert summary["metrics"]["rouge1"]["mean"] == 1.0
+    assert summary["metrics"]["language_correct"]["mean"] == 1.0
+    assert set(results["families"]["bangla_robustness"]) == {
+        "formal",
+        "colloquial",
+        "code_switched",
+        "transliterated",
+        "noisy_mixed",
+    }
 
 
 def test_hallucination_suite_reports_context_token_coverage():

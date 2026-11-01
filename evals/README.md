@@ -15,6 +15,32 @@ Benchmark suites:
 
 Every model release should have a reproducible evaluation report.
 
+KGPT-004's checked-in JSON snapshots are stored in `evals/results/baseline/`.
+They cover the Bangla core and robustness, safety, refusal, preference, and
+grounded-QA suites and were generated on the `all` split with the `mock`
+target. These are frozen harness/proxy baselines, not measurements of a trained
+model; replace them with reviewed model predictions before using them to
+approve a model release.
+Regenerate a snapshot with the corresponding suite, for example:
+
+```bash
+python -m evals.run \
+  --suite evals/suites/bangla.yaml \
+  --split all \
+  --out-dir evals/results/baseline \
+  --name bangla
+```
+
+For the robustness baseline, use `evals/suites/bangla-robustness.yaml` and
+`--name bangla-robustness`.
+
+The `KGPT-004 Release evaluation gate` job in `.github/workflows/ci.yml` runs
+these suites, including the KGPT-005 robustness suite, and compares their
+summaries against the frozen JSON files. Set that job as a required status
+check in repository branch protection to make it a merge/release precondition.
+CI currently uses the mock target, so the gate protects benchmark and harness
+consistency rather than trained-model quality.
+
 Per-family SFT suites live in `evals/suites/sft-*.yaml` and select matching
 files from `data/benchmarks/sft/v1/`. For example:
 
