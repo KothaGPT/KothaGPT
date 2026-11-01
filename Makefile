@@ -329,6 +329,30 @@ plans-check: | $(VENV)
 eval-gate: | $(VENV)
 	$(PYTHON) -m evals.gate --candidate $(CANDIDATE) --baseline $(BASELINE) $(if $(JSON_OUT),--json-out $(JSON_OUT))
 
+# WS-6 tier-aware evaluation and release gates.
+TIER ?= nano
+EVAL_TARGET ?= mock
+EVAL_ARGS ?=
+.PHONY: eval-tier eval-tier-gate eval-adversarial eval-redteam
+eval-tier: | $(VENV)
+	$(PYTHON) -m evals.tier_gate \
+		--suite evals/suites/tier-$(TIER).yaml \
+		--target $(EVAL_TARGET) $(EVAL_ARGS)
+
+eval-tier-gate: | $(VENV)
+	@test -n "$(BASELINE)" || (echo "set BASELINE to a reviewed tier result JSON" >&2; exit 2)
+	$(PYTHON) -m evals.tier_gate \
+		--suite evals/suites/tier-$(TIER).yaml \
+		--target $(EVAL_TARGET) --baseline "$(BASELINE)" $(EVAL_ARGS)
+
+eval-adversarial: | $(VENV)
+	$(PYTHON) -m evals.adversarial --target $(EVAL_TARGET) \
+		$(if $(BASELINE),--baseline "$(BASELINE)") $(EVAL_ARGS)
+
+eval-redteam: | $(VENV)
+	$(PYTHON) -m evals.redteam --target $(EVAL_TARGET) \
+		$(if $(BASELINE),--baseline "$(BASELINE)") $(EVAL_ARGS)
+
 # KGPT-001: Repository baseline validation — verifies the install path,
 # required files, tokenizer artifact, model registry, and Makefile targets.
 baseline: | $(VENV)

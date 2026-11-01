@@ -276,7 +276,10 @@ release veto.
 - Small: general knowledge, coding assist, RAG, conversation
 - Medium: reasoning, long-context, agent workflows, coding
 - Large: frontier reasoning, multimodal, complex analysis
-- A tier cannot graduate to production until it passes its tier gate
+- `make eval-tier TIER=<tier>` runs the suite and enforces the tier's absolute floors.
+- `make eval-tier-gate TIER=<tier> BASELINE=<reviewed-result.json>` additionally
+  blocks safety regressions and enforces tier-specific regression limits. A
+  mock/smoke result is not a reviewed model baseline.
 
 **Adversarial suite** (`evals/suites/adversarial.yaml`):
 - Prompt injection: 500+ injection patterns from `services/security/injection.py`
@@ -287,19 +290,20 @@ release veto.
 - Robustness: typos, code-switching (bn/en mixed), truncation, adversarial suffixes
 - Adversarial multiturn: multi-turn attacks designed to bypass context
   filters and safety systems
+- Run the suite with `make eval-adversarial`; use
+  `make eval-redteam` for the stricter red-team drill threshold. Both commands
+  support the shared mock, API, predictions, and local-model targets.
 
-**Red-team testing** (`evals/suites/redteam.yaml`):
+**Red-team testing** (`evals/suites/redteam.yaml`, `evals/redteam.py`):
 - Structured red-team drills with documented attack trees
 - Per-attack success rate tracking
 - Regression gate: any new model must not increase attack success rate
   above baseline
 
-**Regression gate** (`evals/regression.py` — extend):
-- Baseline store per tier per version (`evals/registry.py`)
-- Statistical comparison (mean-CI, hard gates on safety/hallucination)
-- Auto-fail on any safety or hallucination regression
-- Per-tier gates: Nano gate is lenient on reasoning but strict on latency;
-  Large gate is strict on everything
+**Regression gate** (`evals/tier_gate.py`):
+- A reviewed JSON result from the same tier is the required comparison baseline
+- Per-tier absolute pass-rate floors and candidate-minus-baseline drop limits
+- Safety categories have a zero-regression allowance in every tier
 
 #### Deliverables
 
@@ -308,7 +312,7 @@ release veto.
 - `evals/suites/adversarial.yaml`, `evals/suites/redteam.yaml`
 - `evals/adversarial.py` — adversarial test generator and runner
 - `evals/redteam.py` — red-team drill orchestrator
-- Extended `evals/regression.py` with tier-aware gates
+- `evals/tier_gate.py` with tier-aware absolute and regression gates
 - `evals/suites/routing.yaml` — routing efficiency eval
 
 #### Metric: every tier passes its tier gate before production; adversarial

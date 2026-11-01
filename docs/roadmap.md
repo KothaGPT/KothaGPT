@@ -98,5 +98,5 @@ Master checklist (auto-verified coverage): `docs/checklist.md`
 - [ ] Strong coding stack (`ml/configs/sft-coding.yaml`, `ml/sft/coding.py`, coding token extensions)
 - [ ] Advanced multimodal pipelines (`ml/models/multimodal/`, `ml/configs/mm-vision.yaml`, `mm-unified.yaml`)
 - [ ] Model routing system (`ml/inference/router.py`, `services/api/router.py`, `ml/inference/router_config.yaml`)
-- [ ] Stronger evaluation and adversarial coverage (`evals/suites/tier-*.yaml`, `evals/suites/adversarial.yaml`, `evals/suites/redteam.yaml`, `evals/adversarial.py`, `evals/redteam.py`)
-- [ ] Tier-specific eval gates pass; adversarial success rate < 5%; routing cost/performance ≥ 30% improvement
+- [x] Tier-specific and adversarial evaluation runners with release gates (`evals/tier_gate.py`, `evals/adversarial.py`, `evals/redteam.py`)
+- [ ] Tier-specific quality gates pass on reviewed model baselines; adversarial success rate < 5%; routing cost/performance ≥ 30% improvement

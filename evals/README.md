@@ -79,3 +79,30 @@ python -m evals.run \
 by task family. For the unsupported-token rate, a negative delta means fewer
 answer tokens are absent from context. This is a descriptive comparison, not a
 significance test.
+
+## Tier and adversarial release gates
+
+Run a tier suite with its absolute quality and safety floors:
+
+```bash
+make eval-tier TIER=nano EVAL_TARGET=model \
+  EVAL_ARGS='--checkpoint path/to/checkpoint --tokenizer path/to/tokenizer'
+```
+
+Tier reports contain the same per-category pass-rate summary shape as
+`evals.run`. A passing smoke run is not release approval. Compare a candidate
+against a reviewed result from the same tier to enforce regression limits:
+
+```bash
+make eval-tier-gate TIER=nano EVAL_TARGET=model \
+  BASELINE=evals/results/baseline/nano-reviewed.json \
+  EVAL_ARGS='--checkpoint path/to/checkpoint --tokenizer path/to/tokenizer'
+```
+
+Use `make eval-adversarial` for the <5% attack success gate and
+`make eval-redteam` for the stricter <2% drill gate. Both accept the same
+`EVAL_TARGET` values (`mock`, `api`, `predictions`, or `model`) and write JSON
+and Markdown reports under `evals/results/`. Predictions targets require
+JSONL entries keyed by suite case ID using `record_id` and `prediction`.
+For release regression checks, pass `BASELINE=reviewed-result.json`; the
+candidate must not increase the adversarial success rate above that baseline.
