@@ -1,6 +1,7 @@
 VENV := .venv
 PYTHON ?= $(VENV)/bin/python
 RUFF ?= $(VENV)/bin/ruff
+BLOCK_SIZE ?= 4096
 
 $(VENV):
 	python3 -m venv $(VENV)
@@ -77,7 +78,7 @@ data-tokenize: | $(VENV)
 	$(PYTHON) -m ml.tokenize_shards \
 		--corpus $$(cat data/processed/CURRENT 2>/dev/null) \
 		--tokenizer ml/tokenizer/artifacts/best \
-		--block-size 4096 \
+		--block-size $(BLOCK_SIZE) \
 		--out data/tokenized
 
 # WS-2: MoE training recipe smoke (Phase B). Exercises the sparse MoE block
