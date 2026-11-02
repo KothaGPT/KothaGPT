@@ -9,8 +9,8 @@ model:
   rope_theta: 500000.0
   mm_hidden: 512
   vision_encoder: true
-  audio_encoder: true
-  document_encoder: true
+  audio_encoder: false
+  document_encoder: false
   tie_word_embeddings: true
 
 training:

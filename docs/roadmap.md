@@ -93,10 +93,10 @@ Master checklist (auto-verified coverage): `docs/checklist.md`
 
 ## Phase 10.5 — Production Model Family (`docs/production-model-plan.md`)
 - [ ] Kotha Nano / Small / Medium / Large tiering (`ml/configs/nano.yaml`, `medium.yaml`, `large.yaml`, `ml/models/tier.py`)
-- [ ] MoE research track for frontier efficiency (top-k router, SwiGLU experts, and MoE transformer block implemented; training/inference optimization remains)
+- [ ] MoE research track for frontier efficiency (`ml/models/moe/`, `ml/configs/moe.yaml`, `ml/inference/moe_engine.py`)
 - [ ] Strong reasoning stack (`ml/configs/sft-reasoning.yaml`, `ml/sft/reasoning.py`, `ml/models/reasoning_head.py`)
 - [ ] Strong coding stack (`ml/configs/sft-coding.yaml`, `ml/sft/coding.py`, coding token extensions)
-- [ ] Advanced multimodal pipelines (baseline vision/audio/document encoders and unified decoder integration implemented; pretrained backbones, OCR/data pipelines, and modality-aware generation remain)
+- [ ] Advanced multimodal pipelines (`ml/models/multimodal/`, `ml/configs/mm-vision.yaml`, `mm-unified.yaml`)
 - [ ] Model routing system (`ml/inference/router.py`, `services/api/router.py`, `ml/inference/router_config.yaml`)
-- [x] Tier-specific and adversarial evaluation runners with release gates (`evals/tier_gate.py`, `evals/adversarial.py`, `evals/redteam.py`)
-- [ ] Tier-specific quality gates pass on reviewed model baselines; adversarial success rate < 5%; routing cost/performance ≥ 30% improvement
+- [ ] Stronger evaluation and adversarial coverage (`evals/suites/tier-*.yaml`, `evals/suites/adversarial.yaml`, `evals/suites/redteam.yaml`, `evals/adversarial.py`, `evals/redteam.py`)
+- [ ] Tier-specific eval gates pass; adversarial success rate < 5%; routing cost/performance ≥ 30% improvement

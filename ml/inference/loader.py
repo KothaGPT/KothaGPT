@@ -7,45 +7,6 @@ from typing import Any
 
 from ml.inference.registry import get_registry
 
-# Resolve artifact paths against the repository root rather than the process
-# CWD, so the loader works regardless of where it is invoked from.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-
-_ALLOWED_QUANT_LEVELS = {"none", "int8", "int4", "bf16"}
-
-
-def _normalize_quant(quant: str | None) -> str:
-    value = (quant or "none").strip().lower()
-    if value not in _ALLOWED_QUANT_LEVELS:
-        raise ValueError(f"unsupported quant mode {quant!r}; expected one of {sorted(_ALLOWED_QUANT_LEVELS)}")
-    return value
-
-
-def _model_config_for_record(rec, artifact: Path):
-    from ml.models import load_config
-    from ml.models.config import ModelConfig
-
-    cfg_path = artifact / "config.json" if artifact.is_dir() else _REPO_ROOT / "ml" / "configs" / "small.yaml"
-    if cfg_path.is_file():
-        try:
-            return load_config(cfg_path)
-        except Exception:  # noqa: BLE001, S110
-            pass
-
-    return type(
-        "Cfg",
-        (),
-        {
-            "model": ModelConfig(
-                vocab_size=698,
-                hidden_size=128,
-                num_layers=2,
-                num_heads=4,
-                max_position_embeddings=rec.context_window,
-            )
-        },
-    )()
-
 
 def load_model(model_id: str = "kothagpt", device: str = "cpu", quant: str = "none"):
     reg = get_registry()
@@ -80,16 +41,10 @@ def load_model(model_id: str = "kothagpt", device: str = "cpu", quant: str = "no
         model_state = state.get("model_state", state) if isinstance(state, dict) else state
         model.load_state_dict(model_state, strict=False)
 
-    if quant_value == "bf16":
-        import torch
-
-        if not hasattr(torch, "bfloat16"):
-            raise ValueError("bf16 precision is not supported in this PyTorch build")
-        model.to(device=device, dtype=torch.bfloat16)
-    elif quant_value != "none":
+    if quant != "none":
         from ml.inference.quant import quantize_model
 
-        bits = 8 if quant_value == "int8" else 4
+        bits = 8 if quant == "int8" else 4
         quantize_model(model, bits=bits)
 
     model.to(device).eval()

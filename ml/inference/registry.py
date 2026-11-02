@@ -57,7 +57,7 @@ class ModelRegistry:
                         context_window=16384, quant_level="int4"),
             ModelRecord(id="kothagpt", name="Kotha GPT Base", version="0.2.0",
                         family="kothagpt", device_profile="cpu",
-                        context_window=8192, quant_level="none"),
+                        context_window=4096, quant_level="none"),
             ModelRecord(id="kothagpt-embed", name="Kotha Embed", version="0.2.0",
                         family="kothagpt-embed", device_profile="cpu",
                         context_window=8192),

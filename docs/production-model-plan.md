@@ -28,18 +28,13 @@ Guiding principles:
 
 | Area | Exists | Gaps |
 | --- | --- | --- |
-| Model tiering | `nano.yaml`, `small.yaml`, `medium.yaml`, and `large.yaml`; `ml/models/tier.py` maps all four tiers and defines parameter, context, device, quantization, cost, and latency metadata | tier dimensions and cost/latency values are configuration targets; no trained per-tier artifacts or all-tier model validation are checked in |
-| Registry | `ModelRegistry` seeds nano/small/medium/large and base/embed/rerank records; MoE is marked `research`; optional Postgres persistence is supported | tier defaults are catalog records with `ready` status but empty `artifact_path` and `digest`; the API model list intentionally excludes nano, medium, and large |
-| Architecture | Dense decoder plus prototype MoE layers/router, vision/audio/document encoders and unified wrapper, and an optional reasoning head | these modules are not evidence of production-trained capability; MoE quality/compute comparisons and production multimodal backbones/integration remain open |
-| MoE training | `ml/models/moe/train.py` — `MoETrainer` smoke recipe with separate LR for MoE params and auxiliary load-balancing loss; `make moe-smoke` runs end-to-end | no capacity enforcement, shared-expert fallback, expert-choice routing, or dense-vs-MoE quality/compute comparison at a fixed parameter budget (Phase A) |
-| MoE inference | `ml/inference/moe_engine.py` — `MoEEngine` with `build_routing_table`, `expert_parallel_batch`, and hidden-state `generate`; `ml/inference/expert_parallel.py` — `ExpertParallelBatcher` | smoke only; no production static routing table, device placement, or quantization-friendly MoE integration (Phase C) |
-| Multimodal SFT | `ml/sft/mm_dataset.py` — `MultimodalDataset` + `load_mm_records` grouping by image/audio/document/text | no pretrained/frozen CLIP or Whisper backbones; no modality-aware generation; no multimodal benchmark targets |
-| Trainer | `ml/trainer/` loop, checkpoint, scheduler, monitor, DDP/FSDP; `ml/models/moe/train.py` — `MoETrainer` smoke recipe with separate LR for MoE params and auxiliary load-balancing loss (`make moe-smoke`) | no tier-aware training; MoE recipe is smoke-only (no capacity enforcement, shared-expert fallback, or expert-choice routing) |
-| SFT | `ml/sft/` with bn/en/multilingual/code variants; `ml/sft/reasoning.py` and `ml/sft/coding.py` specialist dataset loaders with family annotation (math/logic/multihop/commonsense; function_synthesis/bug_fix/explanation/bangla_comment); `ml/tokenizer/coding.py` additive coding special-token extensions; `evals/suites/reasoning.yaml`, `evals/suites/coding.yaml`, `evals/suites/multimodal.yaml` | no tier-specific SFT; execution-based pass@k and syntax-validity scoring remain to be wired into the coding eval |
-| Eval | `evals/` includes general and task suites, four tier suites, `evals/tier_gate.py`, and an adversarial suite | checked-in tier gate tests use gold responses with `MockTarget`; no model-backed per-tier baseline or MoE evaluation evidence is checked in |
-| Inference | `ml/inference/` engine, KV cache, batcher, quantization, loader, registry, and a `ModelRouter` task-class mapping with a static escalation chain | the router is wired into the API (`services/api/router.py` + `services/api/api/routers/chat.py`) via the `X-Kotha-Tier` header (`auto`/`nano`/`small`/`medium`/`large`); it loads `ml/inference/router_config.yaml` and escalates when measured quality is below the floor; no MoE inference engine |
-
-Status evidence: `tests/test_model_loader.py` covers the `kothagpt-small` loader alias, and `tests/test_api.py` covers runtime model-ID and API model-list contracts. `tests/test_tier_gate.py` exercises tier suites and gate behavior with mock/gold responses, not trained tier checkpoints. There are no direct tests for `ModelRouter` or the tier defaults in `ModelRegistry`; configuration, routing, and registry entries therefore describe implemented scaffolding, not verified production capability.
+| Model tiering | `small.yaml` (768/12L), `long.yaml` (16k ctx), `smoke.yaml` (192/2/4), SFT configs (128/4L) | no formal tiering taxonomy; no Nano/Medium/Large configs |
+| Registry | `ModelRegistry` with `kothagpt`, `kothagpt-small`, `kothagpt-embed`, `kothagpt-rerank` | no tier fields, no MoE entries, no multimodal entries |
+| Architecture | decoder-only transformer (SwiGLU, RoPE, RMSNorm) | no MoE layer, no multimodal encoder, no reasoning-specific head |
+| Trainer | `ml/trainer/` loop, checkpoint, scheduler, monitor, DDP/FSDP | no tier-aware training, no MoE training recipe |
+| SFT | `ml/sft/` with bn/en/multilingual/code variants | no reasoning/coding-specialist SFT pipeline, no tier-specific SFT |
+| Eval | `evals/` with general, bangla, english, coding, reasoning, math, RAG, agent, hallucination, safety, latency, token-efficiency | no tier-specific eval gates, no adversarial suite, no MoE eval |
+| Inference | `ml/inference/` engine, KV cache, batcher, quant, loader, registry, version | no tier-aware router, no MoE inference engine, no multimodal decoder |
 
 ---
 
@@ -106,14 +101,9 @@ frontier-quality models at reduced compute cost.
 **Phase A — Architecture research**
 - Implement `ml/models/moe/` package:
   - `SparseMoELayer`: top-k gating (k=2), load-balanced expert routing
-  - `ExpertFFN`: SwiGLU expert
+  - `ExpertFFN`: SwiGLU expert with shared expert fallback
   - `MoEBlock`: transformer block with MoE FFN replacing dense FFN
-  - `Router`: differentiable softmax top-k gating and auxiliary load-balancing loss
-- Core router, expert, sparse layer, and transformer block are implemented in
-  `ml/models/moe/`; forward/backward coverage is in
-  `tests/test_moe_router.py` and `tests/test_moe_layer.py`.
-- Capacity enforcement, shared-expert fallback, expert-choice routing, and
-  dense-vs-MoE quality/compute comparisons remain research work.
+  - `Router`: softmax gating with capacity factor, expert-choice routing
 - Compare dense vs MoE at fixed parameter budget (e.g., 7B dense vs 7B MoE with 8 experts)
 - Deliverables: `moe/layer.py`, `moe/router.py`, `moe/block.py`, `moe/decision.md`
 
@@ -121,7 +111,7 @@ frontier-quality models at reduced compute cost.
 - Auxiliary loss for load balancing (expert utilization)
 - Capacity factor tuning (prevent expert collapse)
 - Training stability: lower LR for MoE layers, gradual capacity warmup
-- Deliverables: `moe/train.py` (implemented: `MoETrainer` smoke recipe with separate LR for MoE params + auxiliary loss, `make moe-smoke`), `moe/loss.py` (folded into `Router.auxiliary_loss`), training stability report (open)
+- Deliverables: `moe/train.py`, `moe/loss.py`, training stability report
 
 **Phase C — Inference optimization**
 - Static routing table (pre-compute top-2 experts per token bucket)
@@ -192,20 +182,14 @@ encoder paths with unified decoder, enabling rich multimodal inputs.
 
 #### Architecture
 
-- **Vision encoder**: image patch encoder projecting image patches into the
-  model's hidden space; `mm_hidden` controls the projection dimension
-- **Audio encoder**: waveform-to-log-spectral-frame encoder projecting audio
-  features into hidden space
-- **Document encoder**: layout-aware encoder for OCR token IDs, normalized
-  bounding boxes, and page IDs; OCR extraction is an upstream responsibility
-- **Unified decoder**: existing KothaGPT decoder over concatenated text and
-  modality embeddings, using decoder self-attention for fusion
-
-The initial encoders are trainable, self-contained baselines. They are not
-pretrained/frozen CLIP or Whisper encoders, and the unified path does not yet
-provide dedicated cross-modal attention. Production-quality pretrained
-backbones, OCR/data pipelines, modality-aware generation, and benchmark targets
-remain follow-up work.
+- **Vision encoder**: frozen ViT (or CLIP-style) encoder projecting
+  image patches into the model's hidden space; `mm_hidden` config field
+  controls the projection dimension
+- **Audio encoder**: frozen audio encoder (Whisper-style or HuBERT)
+  projecting audio features into hidden space
+- **Document encoder**: OCR + layout-aware encoder for document understanding
+- **Unified decoder**: existing KothaGPT decoder with multimodal-aware
+  attention layers that fuse cross-modal context
 
 #### Implementation phases
 
@@ -227,7 +211,7 @@ remain follow-up work.
 
 **Phase D — Unified model**
 - `ml/models/multimodal/unified.py`: `KothaMultimodal` extending `KothaGPT`
-  with modality encoders and concatenation-based decoder fusion
+  with multimodal encoders, cross-modal attention, and unified generation
 - `ml/configs/mm-unified.yaml`: combined multimodal config
 - Deliverables: `unified.py`, `mm-unified.yaml`, multimodal eval suite
 
@@ -292,10 +276,7 @@ release veto.
 - Small: general knowledge, coding assist, RAG, conversation
 - Medium: reasoning, long-context, agent workflows, coding
 - Large: frontier reasoning, multimodal, complex analysis
-- `make eval-tier TIER=<tier>` runs the suite and enforces the tier's absolute floors.
-- `make eval-tier-gate TIER=<tier> BASELINE=<reviewed-result.json>` additionally
-  blocks safety regressions and enforces tier-specific regression limits. A
-  mock/smoke result is not a reviewed model baseline.
+- A tier cannot graduate to production until it passes its tier gate
 
 **Adversarial suite** (`evals/suites/adversarial.yaml`):
 - Prompt injection: 500+ injection patterns from `services/security/injection.py`
@@ -306,20 +287,19 @@ release veto.
 - Robustness: typos, code-switching (bn/en mixed), truncation, adversarial suffixes
 - Adversarial multiturn: multi-turn attacks designed to bypass context
   filters and safety systems
-- Run the suite with `make eval-adversarial`; use
-  `make eval-redteam` for the stricter red-team drill threshold. Both commands
-  support the shared mock, API, predictions, and local-model targets.
 
-**Red-team testing** (`evals/suites/redteam.yaml`, `evals/redteam.py`):
+**Red-team testing** (`evals/suites/redteam.yaml`):
 - Structured red-team drills with documented attack trees
 - Per-attack success rate tracking
 - Regression gate: any new model must not increase attack success rate
   above baseline
 
-**Regression gate** (`evals/tier_gate.py`):
-- A reviewed JSON result from the same tier is the required comparison baseline
-- Per-tier absolute pass-rate floors and candidate-minus-baseline drop limits
-- Safety categories have a zero-regression allowance in every tier
+**Regression gate** (`evals/regression.py` — extend):
+- Baseline store per tier per version (`evals/registry.py`)
+- Statistical comparison (mean-CI, hard gates on safety/hallucination)
+- Auto-fail on any safety or hallucination regression
+- Per-tier gates: Nano gate is lenient on reasoning but strict on latency;
+  Large gate is strict on everything
 
 #### Deliverables
 
@@ -328,7 +308,7 @@ release veto.
 - `evals/suites/adversarial.yaml`, `evals/suites/redteam.yaml`
 - `evals/adversarial.py` — adversarial test generator and runner
 - `evals/redteam.py` — red-team drill orchestrator
-- `evals/tier_gate.py` with tier-aware absolute and regression gates
+- Extended `evals/regression.py` with tier-aware gates
 - `evals/suites/routing.yaml` — routing efficiency eval
 
 #### Metric: every tier passes its tier gate before production; adversarial
