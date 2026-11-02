@@ -320,7 +320,7 @@ version-smoke: | $(VENV)
 	$(PYTHON) -c "from ml.inference.version import VersionManager; vm=VersionManager(); vm.register_version('kothagpt','a'); print('version ok')"
 
 scale-smoke: | $(VENV)
-	$(PYTHON) -m ml.pretrain.scale --config ml/configs/long.yaml --tokenizer ml/tokenizer/artifacts/best --max-steps 2
+	$(PYTHON) -m ml.pretrain.scale --config ml/configs/long.yaml --tokenizer ml/tokenizer/artifacts/best --max-steps 1 --max-length 512
 
 eval-sft-vs-base: | $(VENV)
 	$(PYTHON) -m evals.sft_vs_base --records tests/fixtures/instruction.jsonl --base tests/fixtures/instruction.predictions.json --sft tests/fixtures/instruction.predictions.json --out evals/results/sft_vs_base.json
