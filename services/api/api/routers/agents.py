@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from ...core.agent_runner import run_agent_with_loop
 from ..auth import require_api_token
 from ..backend import get_active_backend
 from ..schemas import Agent, AgentRun, AgentRunRequest, AgentSpec
@@ -55,7 +56,14 @@ def delete_agent(agent_id: str) -> None:
 @router.post("/{agent_id}/runs", response_model=AgentRun, status_code=201)
 def run_agent(agent_id: str, request: AgentRunRequest) -> AgentRun:
     backend = get_active_backend("agents")
-    return backend.run_agent(agent_id, request.message)
+    try:
+        agent = backend.get_agent(agent_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    run = run_agent_with_loop(agent_id, request.message, agent, backend)
+    backend._runs[run.id] = run
+    return run
 
 
 @router.post("/{agent_id}/runs/stream")

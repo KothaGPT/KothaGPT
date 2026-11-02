@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import json
+import uuid
+from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Response
+from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from ...core.backend import BackendUnavailableError
+from ...core.conversation_store import (
+    StoredMessage,
+    get_conversation_store,
+)
 from ...core.rag_runtime import rag_runtime
 from ...router import route_request
 from ..backend import get_active_backend
 from ..schemas import (
     ChatCompletionRequest,
     ChatCompletionResponse,
-    LegacyChatRequest,
     LegacyChatResponse,
     Message,
 )
@@ -66,6 +72,55 @@ def _apply_rag_grounding(
         user=request.user,
     )
     return grounded_request, citations
+
+
+def _chat_completion_request(
+    messages: list[dict[str, Any]],
+    model: str = "kothagpt",
+    temperature: float | None = 0.7,
+    top_p: float | None = 1.0,
+    max_tokens: int | None = None,
+    stream: bool = False,
+) -> ChatCompletionRequest:
+    """Build a :class:`ChatCompletionRequest` from raw message dicts."""
+    chat_messages = [
+        Message(
+            role=m.get("role", "user"),
+            content=m.get("content", ""),
+            name=m.get("name"),
+            tool_calls=m.get("toolCalls"),
+            tool_call_id=m.get("toolCallId"),
+        )
+        for m in messages
+    ]
+    return ChatCompletionRequest(
+        model=model,
+        messages=chat_messages,
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+        stream=stream,
+    )
+
+
+class ChatRequest(BaseModel):
+    conversation_id: str | None = Field(default=None, alias="conversationId")
+    model: str = "kothagpt"
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+    system_prompt: str | None = Field(default=None, alias="systemPrompt")
+    temperature: float | None = Field(default=0.7, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(default=None, alias="maxTokens", ge=1)
+    stream: bool = False
+
+    model_config = {"populate_by_name": True}
+
+
+class ChatMessageOut(BaseModel):
+    id: str
+    role: str
+    content: str
+    model: str | None = None
+    created_at: int | None = Field(default=None, alias="createdAt")
 
 
 @router.post("/chat/completions", response_model=ChatCompletionResponse)
@@ -159,23 +214,154 @@ async def chat_stream(
     )
 
 
-@router.post("/chat", response_model=LegacyChatResponse)
-async def chat(request: LegacyChatRequest) -> LegacyChatResponse:
-    """Legacy single-message chat, kept for backward compatibility."""
-    backend = get_active_backend("chat")
-    chat_req = ChatCompletionRequest(
-        model=request.model,
-        messages=[{"role": "user", "content": request.message}],
-    )
+@router.post("/chat", response_model=None)
+async def chat(
+    request: Request,
+    response: Response,
+) -> StreamingResponse | ChatMessageOut | LegacyChatResponse:
+    """Unified chat endpoint.
+
+    Accepts either the legacy single-message body::
+
+        {"message": "...", "model": "kothagpt"}
+
+    or the web-client ``ChatRequest`` body::
+
+        {"conversationId": "...", "model": "kothagpt",
+         "messages": [{role, content}], "stream": true, ...}
+
+    When ``stream`` is true, emits ``ChatStreamEvent``-shaped SSE frames
+    (``start``/``delta``/``done``). Conversations are persisted via the
+    :class:`services.api.core.conversation_store.ConversationStore`.
+    """
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Request body must be a JSON object")
+
+    # Legacy single-message path.
+    if "message" in body and "messages" not in body:
+        backend = get_active_backend("chat")
+        chat_req = ChatCompletionRequest(
+            model=body.get("model", "kothagpt"),
+            messages=[{"role": "user", "content": str(body.get("message", ""))}],
+        )
+        try:
+            resp = backend.chat(chat_req)
+        except BackendUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return LegacyChatResponse(
+            model=chat_req.model,
+            message=chat_req.messages[0].content,
+            output=resp.choices[0].message.content,
+        )
+
+    # Web-client path.
     try:
-        response = backend.chat(chat_req)
-    except BackendUnavailableError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return LegacyChatResponse(
-        model=request.model,
-        message=request.message,
-        output=response.choices[0].message.content,
+        chat_request = ChatRequest(**body)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid chat request: {exc}") from exc
+
+    if not chat_request.messages:
+        raise HTTPException(status_code=400, detail="messages must not be empty")
+
+    conversation_id = chat_request.conversation_id
+    store = get_conversation_store()
+
+    # Ensure the conversation exists (create it from the first user message if needed).
+    if conversation_id is None:
+        first_user = next(
+            (m.get("content", "") for m in chat_request.messages if m.get("role") == "user"),
+            "",
+        )
+        conversation_id = store.create(
+            _cid(),
+            title=(first_user[:60] or "New chat"),
+            model=chat_request.model,
+        ).id
+    elif store.get(conversation_id) is None:
+        store.create(conversation_id, title="New chat", model=chat_request.model)
+
+    # Persist the incoming messages (client is authoritative for the transcript).
+    stored = [
+        StoredMessage(
+            id=m.get("id") or _mid(),
+            role=m.get("role", "user"),
+            content=m.get("content", ""),
+            model=m.get("model") or chat_request.model,
+        )
+        for m in chat_request.messages
+    ]
+    store.set_messages(conversation_id, stored)
+
+    completion_request = _chat_completion_request(
+        messages=chat_request.messages,
+        model=chat_request.model,
+        temperature=chat_request.temperature,
+        max_tokens=chat_request.max_tokens,
+        stream=True,
     )
+    if chat_request.system_prompt:
+        completion_request.messages.insert(
+            0,
+            Message(role="system", content=chat_request.system_prompt),
+        )
+
+    backend = get_active_backend("chat", "streaming")
+
+    assistant_id = _mid()
+    assistant_content_parts: list[str] = []
+
+    def generate():
+        # start event
+        yield f"data: {json.dumps({'type': 'start', 'conversationId': conversation_id}, ensure_ascii=False)}\n\n"
+        try:
+            for chunk in backend.chat_stream(completion_request):
+                choices = chunk.choices or []
+                if choices:
+                    delta = choices[0].get("delta", {}) if isinstance(choices[0], dict) else {}
+                    content = delta.get("content", "") or ""
+                    if content:
+                        assistant_content_parts.append(content)
+                        yield f"data: {json.dumps({'type': 'delta', 'content': content}, ensure_ascii=False)}\n\n"
+        except BackendUnavailableError as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        assistant_content = "".join(assistant_content_parts)
+        # Persist the assistant message.
+        assistant_msg = StoredMessage(
+            id=assistant_id,
+            role="assistant",
+            content=assistant_content,
+            model=completion_request.model,
+        )
+        current = store.get_messages(conversation_id)
+        current.append(assistant_msg)
+        store.set_messages(conversation_id, current)
+        store.touch(conversation_id)
+        yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.get("/chat/{conversation_id}/message/{message_id}", response_model=ChatMessageOut)
+def get_message(conversation_id: str, message_id: str) -> ChatMessageOut:
+    store = get_conversation_store()
+    if store.get(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    for message in store.get_messages(conversation_id):
+        if message.id == message_id:
+            return ChatMessageOut(
+                id=message.id,
+                role=message.role,
+                content=message.content,
+                model=message.model,
+                created_at=message.created_at,
+            )
+    raise HTTPException(status_code=404, detail="Message not found")
 
 
 def _sse_stream(chunks) -> StreamingResponse:  # type: ignore[no-untyped-def]
@@ -185,6 +371,14 @@ def _sse_stream(chunks) -> StreamingResponse:  # type: ignore[no-untyped-def]
         yield "data: [DONE]\n\n"
 
     return generate()
+
+
+def _cid() -> str:
+    return f"conv_{uuid.uuid4().hex[:24]}"
+
+
+def _mid() -> str:
+    return f"msg_{uuid.uuid4().hex[:24]}"
 
 
 __all__ = ["router"]

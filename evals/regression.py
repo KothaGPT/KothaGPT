@@ -18,8 +18,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from evals.gate import evaluate_gate, load_result, load_results
-
+from evals.gate import evaluate_gate, load_results
 
 # Per-tier critical metrics.  Each entry maps a label to
 # (group, metric, min_allowed_delta).  Negative delta is a regression.
