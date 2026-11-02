@@ -320,6 +320,63 @@ eval-sft-vs-base: | $(VENV)
 	$(PYTHON) -m evals.sft_vs_base --records tests/fixtures/instruction.jsonl --base tests/fixtures/instruction.predictions.json --sft tests/fixtures/instruction.predictions.json --out evals/results/sft_vs_base.json
 	cat evals/results/sft_vs_base.json
 
+# WS-1: validate every tier config file loads and passes ModelConfig.validate().
+config-validate: | $(VENV)
+	$(PYTHON) -c "from pathlib import Path; from ml.models.tier import TIER_CONFIGS; from ml.models.config import load_config; [print(f'OK  {p}') or load_config(Path(p)) for p in TIER_CONFIGS.values()]"
+
+# WS-5: model routing efficiency eval (cost/performance balance).
+eval-routing: | $(VENV)
+	$(PYTHON) -m evals.run --suite evals/suites/routing.yaml --split all --out-dir evals/results --name routing
+
+# WS-3: reasoning stack eval (math/logic/multihop/commonsense).
+eval-reasoning: | $(VENV)
+	$(PYTHON) -m evals.run --suite evals/suites/reasoning.yaml --split all --out-dir evals/results --name reasoning
+
+# WS-3: coding stack eval (function synthesis/bug fix/explanation/bangla comment).
+eval-coding: | $(VENV)
+	$(PYTHON) -m evals.run --suite evals/suites/coding.yaml --split all --out-dir evals/results --name coding
+
+# WS-4: multimodal pipeline eval (vision/audio/document + safety refusal).
+eval-multimodal: | $(VENV)
+	$(PYTHON) -m evals.run --suite evals/suites/multimodal.yaml --split all --out-dir evals/results --name multimodal
+
+# WS-6: regression gate — run every suite against the mock target and fail on
+# any regression vs. the frozen baseline in evals/results/baseline.json.
+BASELINE ?= evals/results/baseline.json
+eval-regress: | $(VENV)
+	$(PYTHON) -m evals.run --suite evals/suites/bangla.yaml --split all --target mock --out-dir /tmp/kothagpt-regress --name regress-bangla
+	$(PYTHON) -m evals.run --suite evals/suites/sft-bn.yaml --split all --target mock --out-dir /tmp/kothagpt-regress --name regress-sft-bn
+	$(PYTHON) -m evals.run --suite evals/suites/sft-en.yaml --split all --target mock --out-dir /tmp/kothagpt-regress --name regress-sft-en
+	$(PYTHON) -m evals.run --suite evals/suites/sft-code.yaml --split all --target mock --out-dir /tmp/kothagpt-regress --name regress-sft-code
+	$(PYTHON) -m evals.run --suite evals/suites/sft-reasoning.yaml --split all --target mock --out-dir /tmp/kothagpt-regress --name regress-sft-reasoning
+	$(PYTHON) -m evals.run --suite evals/suites/tier-nano.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-tier-nano
+	$(PYTHON) -m evals.run --suite evals/suites/tier-small.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-tier-small
+	$(PYTHON) -m evals.run --suite evals/suites/tier-medium.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-tier-medium
+	$(PYTHON) -m evals.run --suite evals/suites/tier-large.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-tier-large
+	$(PYTHON) -m evals.run --suite evals/suites/adversarial.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-adversarial
+	$(PYTHON) -m evals.run --suite evals/suites/redteam.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-redteam
+	$(PYTHON) -m evals.run --suite evals/suites/routing.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-routing
+	$(PYTHON) -m evals.run --suite evals/suites/reasoning.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-reasoning
+	$(PYTHON) -m evals.run --suite evals/suites/coding.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-coding
+	$(PYTHON) -m evals.run --suite evals/suites/multimodal.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-multimodal
+
+# WS-6: full evaluation suite (all suites, mock target). Use eval-regress for
+# the regression gate against a frozen baseline.
+eval-all: | $(VENV)
+	$(MAKE) eval-bangla
+	$(MAKE) eval-bangla-robustness
+	$(MAKE) eval-sft
+	$(MAKE) eval-routing
+	$(MAKE) eval-reasoning
+	$(MAKE) eval-coding
+	$(MAKE) eval-multimodal
+	$(MAKE) eval-tier TIER=nano
+	$(MAKE) eval-tier TIER=small
+	$(MAKE) eval-tier TIER=medium
+	$(MAKE) eval-tier TIER=large
+	$(MAKE) eval-adversarial
+	$(MAKE) eval-redteam
+
 # Auto review & verify the implementation plans in docs/ (structure + links).
 plans-check: | $(VENV)
 	$(PYTHON) scripts/check_plans.py

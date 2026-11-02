@@ -1,0 +1,13 @@
+name: reasoning
+version: v1
+data_dir: ../../data/benchmarks/sft/v1
+# WS-3 reasoning stack eval. Groups the reasoning task families
+# (math, logic, multihop, commonsense) with exact/normalized completion
+# matching plus language-correctness. The mock target returns gold
+# references so the harness is verified end-to-end.
+tasks:
+  - sft-reasoning
+metrics:
+  - exact_match
+  - normalized_match
+  - language_correct

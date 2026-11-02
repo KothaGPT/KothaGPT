@@ -150,6 +150,15 @@ confirmed via `docs/foundation-plan.md`).
    - [x] Scale training — long-context 16k RoPE linear (`ml/configs/long.yaml`, `ml/pretrain/scale.py`, `make scale-smoke` 2 steps 10.75→9.68) and model-based quality evaluation (`evals/sft_vs_base.py`, `make eval-sft-vs-base` base 0.714 vs sft 0.714 Δ0.0 on fixtures)`
 
 - Phase 5 — Runtime: `docs/runtime-plan.md` (engine, KV cache, batching, quantization, registry, API, auth, rate limiting).
+
+Production Model Family — WS-1/WS-3/WS-5 scaffolding complete (commit c2ad2bb+)
+
+- [x] WS-1 tier configs + registry + `make config-validate` — all four tier configs load and validate; `ModelTier` resolves config path to digest; registry lists all four tiers with accurate metadata.
+- [x] WS-3 reasoning/coding specialist SFT — `ml/sft/reasoning.py` and `ml/sft/coding.py` dataset loaders with family annotation; `ml/tokenizer/coding.py` additive coding special-token extensions; `evals/suites/reasoning.yaml`, `evals/suites/coding.yaml`, `evals/suites/multimodal.yaml`; `make eval-reasoning`, `make eval-coding`, `make eval-routing`, `make eval-regress`, `make eval-all` wired.
+- [x] WS-5 model routing wired into the API — `ml/inference/router_config.yaml` (task-class → tier, escalation chain, tier quality, latency SLA); `ModelRouter` loads the YAML and escalates on quality-floor miss; `services/api/router.py` + `services/api/api/routers/chat.py` expose the `X-Kotha-Tier` header (`auto`/`nano`/`small`/`medium`/`large`); routing decision is returned in the `X-Kotha-Routing` response header.
+- [x] WS-1/WS-3/WS-5 tests — `tests/test_model_tier.py`, `tests/test_tier_configs.py`, `tests/test_reasoning_head.py`, `tests/test_coding_tokens.py`, `tests/test_model_router.py`; `make plans-check` clean.
+
+Remaining: real per-tier model artifacts and all-tier model validation; MoE quality/compute comparisons and production multimodal backbones/integration; MoE inference engine; execution-based pass@k and syntax-validity scoring for the coding eval; tier-specific SFT.
 - Phase 6 — Intelligence: `docs/rag-plan.md` (ingestion, retrieval, citations), `docs/agent-plan.md` (tools, memory, planner, loop, sandbox, permissions).
 - Phase 6b — Context Engineering: `docs/context-engineering-plan.md` (prompts, hierarchy, window, packing, compression, selective context, safe formatting, registry).
 - Phase 7 — Platform: `docs/web-app-plan.md` (apps/web dashboard), `docs/sdk-plan.md` + `docs/sdk.md` (multi-language SDKs).

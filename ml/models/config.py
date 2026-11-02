@@ -27,6 +27,10 @@ class ModelConfig:
     vision_encoder: bool = False
     audio_encoder: bool = False
     document_encoder: bool = False
+    # WS-3 reasoning head: optional auxiliary supervision during training.
+    reasoning_head: bool = False
+    # WS-3 coding token extensions: additive coding special tokens.
+    coding_extensions: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -37,6 +41,16 @@ class ModelConfig:
         return int(8 / 3 * self.hidden_size)
 
     def validate(self) -> None:
+        # Coerce numeric strings (e.g. from YAML round-trips where ``1e-5`` is
+        # parsed as the string ``"1e-5"``) so downstream code never sees a
+        # ``str`` where a ``float`` is expected.
+        for field_name in ("rms_norm_eps", "rope_theta", "rope_scaling_factor"):
+            value = getattr(self, field_name)
+            if isinstance(value, str):
+                try:
+                    setattr(self, field_name, float(value))
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"{field_name} must be a number, got {value!r}") from exc
         if self.hidden_size <= 0:
             raise ValueError("hidden_size must be positive")
         if self.num_layers <= 0:
@@ -101,6 +115,15 @@ class TrainingConfig:
         if self.mixed_precision not in ("none", "bf16", "fp16"):
             raise ValueError(f"mixed_precision {self.mixed_precision} not supported")
         if self.min_lr is not None:
+            # Coerce numeric strings (e.g. from YAML round-trips) so validation
+            # never crashes on a type mismatch between a str and an int.
+            if isinstance(self.min_lr, str):
+                try:
+                    self.min_lr = float(self.min_lr)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"min_lr must be a number, got {self.min_lr!r}") from exc
+            if isinstance(self.min_lr, bool) or not isinstance(self.min_lr, (int, float)):
+                raise ValueError(f"min_lr must be a number, got {type(self.min_lr).__name__}")
             if self.min_lr < 0:
                 raise ValueError("min_lr must be non-negative")
             if self.min_lr >= self.learning_rate:
@@ -185,10 +208,16 @@ def load_config(path: str | Path) -> BaseModelConfig:
             except Exception:  # noqa: BLE001, S110
                 pass
 
+    # Filter unknown keys so config files can carry extra metadata (e.g. the
+    # ``tier`` block in ml/configs/*.yaml, ``task_type`` / ``base_model`` in
+    # SFT configs) without breaking the dataclass contract.
+    model_fields = {f for f in ModelConfig.__dataclass_fields__}
+    training_fields = {f for f in TrainingConfig.__dataclass_fields__}
+    data_fields = {f for f in DataConfig.__dataclass_fields__}
     cfg = BaseModelConfig(
-        model=ModelConfig(**model_data),
-        training=TrainingConfig(**training_data),
-        data=DataConfig(**data_data),
+        model=ModelConfig(**{k: v for k, v in model_data.items() if k in model_fields}),
+        training=TrainingConfig(**{k: v for k, v in training_data.items() if k in training_fields}),
+        data=DataConfig(**{k: v for k, v in data_data.items() if k in data_fields}),
     )
     cfg.validate()
     return cfg

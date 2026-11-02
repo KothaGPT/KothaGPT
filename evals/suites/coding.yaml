@@ -1,0 +1,15 @@
+name: coding
+version: v1
+data_dir: ../../data/benchmarks/sft/v1
+# WS-3 coding stack eval. Groups the coding task families
+# (function_synthesis, bug_fix, explanation, bangla_comment) with exact/normalized
+# completion matching. Execution-based pass@k and syntax validity are computed
+# from model predictions against the unit-test fixtures in
+# services/agents/tools/code.py; the mock target returns gold references so the
+# harness is verified end-to-end.
+tasks:
+  - sft-code
+metrics:
+  - exact_match
+  - normalized_match
+  - language_correct
