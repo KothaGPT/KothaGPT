@@ -12,7 +12,7 @@ def _result(summary: dict[str, dict[str, dict[str, float]]]) -> dict[str, Any]:
 
 
 def _group(metrics: dict[str, float]) -> dict[str, Any]:
-    return {"metrics": {k: {"mean": v} for k, v in metrics.items()}}
+    return {"metrics": dict(metrics)}
 
 
 def test_tier_critical_metrics_returns_per_tier_map():

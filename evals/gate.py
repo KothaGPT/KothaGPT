@@ -46,6 +46,14 @@ _DEFAULT_WARN_METRICS: dict[str, tuple[str, str, float]] = {
     ),
 }
 
+# Metrics where a lower value is better, so a regression is an *increase*
+# beyond the threshold rather than a decrease. ``min_delta`` is stored as a
+# negative number; the max allowed increase is ``-min_delta``.
+_LOWER_IS_BETTER: set[str] = {
+    "hallucination.lexical_unsupported_token_rate",
+    "hallucination.semantic_contradiction",
+}
+
 
 def _get_metric(summary: dict[str, Any], group: str, metric: str) -> float | None:
     group_data = summary.get(group)
@@ -92,7 +100,11 @@ def evaluate_gate(
             continue
         delta = cand - base
         details[label] = {"candidate": cand, "baseline": base, "delta": delta}
-        if delta < min_delta:
+        if label in _LOWER_IS_BETTER:
+            regressed = delta > -min_delta
+        else:
+            regressed = delta < min_delta
+        if regressed:
             failures.append(
                 f"{label}: regression {delta:+.4f} (min allowed {min_delta:+.4f})"
             )
