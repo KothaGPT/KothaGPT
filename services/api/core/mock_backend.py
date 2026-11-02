@@ -10,6 +10,12 @@ from collections.abc import AsyncIterator, Iterator, MutableMapping
 from datetime import UTC
 from typing import Any
 
+# Agent tool registry wired into the API tool surface. Tools registered here
+# (mock built-ins + the sandboxed code execution tool) are exposed via
+# ``/v1/tools/*`` and invokable through the backend contract.
+from services.agents.registry import ToolRegistry, ToolSpec
+from services.agents.tools import default_handler
+
 from ..api.schemas import (
     Agent,
     AgentRun,
@@ -33,6 +39,83 @@ from .agent_store import AgentStore, StoredMapping, create_store_from_env
 from .backend import Backend, BackendCapabilities
 
 _EMBEDDING_DIM = 256
+
+_TOKEN_RE = re.compile(r"[\w\u0980-\u09FF']+")
+
+
+def _mock_tool_specs() -> list[tuple[dict[str, Any], object]]:
+    """Built-in mock tools as (spec_dict, handler) pairs.
+
+    The calculator / current_time / web_search tools preserve the historical
+    mock behaviour; the code execution tool is the sandboxed implementation
+    from ``services/agents/tools``.
+    """
+    specs: list[tuple[dict[str, Any], object]] = [
+        (
+            {
+                "name": "calculator",
+                "description": "Evaluate a basic arithmetic expression.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "expression": {
+                            "type": "string",
+                            "description": "e.g. (2 + 3) * 4",
+                        }
+                    },
+                    "required": ["expression"],
+                },
+                "permission": "read",
+                "enabled": True,
+            },
+            lambda expression: {
+                "expression": expression,
+                "value": _safe_eval(str(expression)),
+            },
+        ),
+        (
+            {
+                "name": "current_time",
+                "description": "Get the current UTC time.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+                "permission": "read",
+                "enabled": True,
+            },
+            lambda: {"utc": _utc_now()},
+        ),
+        (
+            {
+                "name": "web_search",
+                "description": "Search the web (mock).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "max_results": {
+                            "type": "integer",
+                            "default": 5,
+                        },
+                    },
+                    "required": ["query"],
+                },
+                "permission": "read",
+                "enabled": True,
+            },
+            lambda query, max_results=5: {
+                "query": query,
+                "max_results": max_results,
+                "results": [{"title": "Mock result", "snippet": "Deterministic search stub."}],
+            },
+        ),
+    ]
+    # Wire in the sandboxed code execution tool from services/agents.
+    spec_dict, handler = default_handler()
+    specs.append((spec_dict, handler))
+    return specs
+
 
 _MODELS = [
     Model(
@@ -61,43 +144,6 @@ _MODELS = [
     ),
 ]
 
-_MOCK_TOOLS = [
-    Tool(
-        function=FunctionDefinition(
-            name="calculator",
-            description="Evaluate a basic arithmetic expression.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "expression": {"type": "string", "description": "e.g. (2 + 3) * 4"},
-                },
-                "required": ["expression"],
-            },
-        )
-    ),
-    Tool(
-        function=FunctionDefinition(
-            name="current_time",
-            description="Get the current UTC time.",
-            parameters={"type": "object", "properties": {}},
-        )
-    ),
-    Tool(
-        function=FunctionDefinition(
-            name="web_search",
-            description="Search the web (mock).",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "max_results": {"type": "integer", "default": 5},
-                },
-                "required": ["query"],
-            },
-        )
-    ),
-]
-
 _TOKEN_RE = re.compile(r"[\w\u0980-\u09FF']+")
 
 
@@ -123,7 +169,19 @@ class MockBackend(Backend):
         store = store or create_store_from_env()
         self._agents: MutableMapping[str, Agent] = StoredMapping(store, "agents", Agent)
         self._runs: MutableMapping[str, AgentRun] = StoredMapping(store, "runs", AgentRun)
-        self._tools = {t.function.name: t for t in _MOCK_TOOLS}
+        self._registry = ToolRegistry()
+        for spec_dict, handler in _mock_tool_specs():
+            self._registry.register(
+                ToolSpec(
+                    name=spec_dict["name"],
+                    description=spec_dict.get("description", ""),
+                    parameters=spec_dict.get("parameters", {}),
+                    permission=spec_dict.get("permission", "read"),
+                    enabled=spec_dict.get("enabled", True),
+                ),
+                handler,
+            )
+        self._allowed = {spec.name for spec in self._registry.list()}
 
     # ---- models ---------------------------------------------------------
 
@@ -201,26 +259,23 @@ class MockBackend(Backend):
     # ---- tools ----------------------------------------------------------
 
     def list_tools(self) -> list[Tool]:
-        return list(self._tools.values())
+        return [
+            Tool(
+                function=FunctionDefinition(
+                    name=spec.name,
+                    description=spec.description,
+                    parameters=spec.parameters,
+                )
+            )
+            for spec in self._registry.list()
+        ]
 
     def invoke_tool(self, name: str, arguments: dict[str, Any]) -> ToolInvokeResponse:
-        if name == "calculator":
-            expression = str(arguments.get("expression", ""))
-            return ToolInvokeResponse(
-                name=name, result={"expression": expression, "value": _safe_eval(expression)}
-            )
-        if name == "current_time":
-            return ToolInvokeResponse(name=name, result={"utc": _utc_now()})
-        if name == "web_search":
-            return ToolInvokeResponse(
-                name=name,
-                result={
-                    "query": arguments.get("query"),
-                    "max_results": arguments.get("max_results", 5),
-                    "results": [{"title": "Mock result", "snippet": "Deterministic search stub."}],
-                },
-            )
-        raise KeyError(f"Unknown tool: {name}")
+        try:
+            result = self._registry.invoke(name, arguments, allowed=self._allowed)
+        except KeyError as exc:
+            raise KeyError(f"Unknown tool: {name}") from exc
+        return ToolInvokeResponse(name=name, result=result)
 
     # ---- agents ---------------------------------------------------------
 

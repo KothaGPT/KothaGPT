@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 _DEFAULT_BACKEND = "mock"
 _DEFAULT_EXAMPLE_MODEL = "hf-internal-testing/tiny-random-gpt2"
@@ -43,6 +43,7 @@ class RuntimeConfig:
     quant: str = _DEFAULT_QUANT
     checkpoint_path: str | None = None
     tokenizer_path: str | None = None
+    cors_origins: list[str] = field(default_factory=lambda: ["http://localhost:3000"])
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> RuntimeConfig:
@@ -62,8 +63,12 @@ class RuntimeConfig:
         backend = canonical
 
         raw_api_token = mapping.get("KOTHAGPT_API_TOKEN")
-        api_token = raw_api_token.strip() if isinstance(raw_api_token, str) and raw_api_token.strip() else None
-        local_mode = (mapping.get("KOTHAGPT_LOCAL_MODE", "false").strip().lower() == "true")
+        api_token = (
+            raw_api_token.strip()
+            if isinstance(raw_api_token, str) and raw_api_token.strip()
+            else None
+        )
+        local_mode = mapping.get("KOTHAGPT_LOCAL_MODE", "false").strip().lower() == "true"
 
         example_model = (mapping.get("KOTHAGPT_EXAMPLE_MODEL") or _DEFAULT_EXAMPLE_MODEL).strip()
         if not example_model:
@@ -87,9 +92,7 @@ class RuntimeConfig:
 
         quant = (mapping.get("KOTHAGPT_QUANT") or _DEFAULT_QUANT).strip().lower()
         if quant not in _ALLOWED_QUANT_LEVELS:
-            raise ValueError(
-                f"KOTHAGPT_QUANT must be one of {sorted(_ALLOWED_QUANT_LEVELS)}"
-            )
+            raise ValueError(f"KOTHAGPT_QUANT must be one of {sorted(_ALLOWED_QUANT_LEVELS)}")
 
         checkpoint_path = mapping.get("KOTHAGPT_MODEL_CHECKPOINT")
         checkpoint_path = checkpoint_path.strip() if isinstance(checkpoint_path, str) else None
@@ -100,6 +103,11 @@ class RuntimeConfig:
         tokenizer_path = tokenizer_path.strip() if isinstance(tokenizer_path, str) else None
         if tokenizer_path == "":
             tokenizer_path = None
+
+        cors_raw = mapping.get("KOTHAGPT_CORS_ORIGINS") or mapping.get("CORS_ORIGINS", "")
+        cors_origins = [o.strip() for o in cors_raw.split(",") if o.strip()] or [
+            "http://localhost:3000"
+        ]
 
         return cls(
             backend=backend,
@@ -112,6 +120,7 @@ class RuntimeConfig:
             quant=quant,
             checkpoint_path=checkpoint_path,
             tokenizer_path=tokenizer_path,
+            cors_origins=cors_origins,
         )
 
 
@@ -124,9 +133,7 @@ def normalize_backend_name(name: str | None) -> str:
         raise ValueError("backend name cannot be empty")
     canonical = _BACKEND_ALIASES.get(backend, backend)
     if not _BACKEND_RE.fullmatch(canonical):
-        raise ValueError(
-            "backend name must contain only lowercase letters, digits, '_' or '-'"
-        )
+        raise ValueError("backend name must contain only lowercase letters, digits, '_' or '-'")
     return canonical
 
 

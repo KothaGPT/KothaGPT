@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .api.routers import (
@@ -6,6 +7,7 @@ from .api.routers import (
     chat_router,
     embeddings_router,
     models_router,
+    rag_router,
     rerank_router,
     tools_router,
     ws_router,
@@ -26,8 +28,16 @@ backend_factory.register("real", EngineBackend)
 
 app = FastAPI(
     title="Kotha GPT API",
-    description="Bangla-first AI platform: chat, streaming, tools, agents, embeddings, reranking.",
+    description="Bangla-first AI platform: chat, streaming, tools, agents, embeddings, reranking, RAG.",
     version="0.2.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=RuntimeConfig.from_env().cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(models_router)
@@ -36,6 +46,7 @@ app.include_router(embeddings_router)
 app.include_router(rerank_router)
 app.include_router(tools_router)
 app.include_router(agents_router)
+app.include_router(rag_router)
 app.include_router(ws_router)
 
 
