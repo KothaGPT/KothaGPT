@@ -388,8 +388,8 @@ eval-all: | $(VENV)
 	$(MAKE) eval-tier TIER=small
 	$(MAKE) eval-tier TIER=medium
 	$(MAKE) eval-tier TIER=large
-	$(MAKE) eval-adversarial
-	$(MAKE) eval-redteam
+	$(MAKE) eval-adversarial BASELINE=
+	$(MAKE) eval-redteam BASELINE=
 
 # Auto review & verify the implementation plans in docs/ (structure + links).
 plans-check: | $(VENV)
