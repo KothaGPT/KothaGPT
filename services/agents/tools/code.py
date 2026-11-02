@@ -5,12 +5,12 @@ from __future__ import annotations
 import ast
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from ...security.sandbox import Sandbox
 
-__all__ = ["CodeExecutionTool", "run_code", "CodeResult"]
+__all__ = ["CodeExecutionTool", "CodeResult", "run_code"]
 
 DEFAULT_CPU_SEC = 5
 DEFAULT_MEM_MB = 256
@@ -179,9 +179,9 @@ class CodeExecutionTool:
         language = arguments.get("language", "python")
         timeout_sec = arguments.get("timeout_sec")
         if not isinstance(code, str):
-            raise ValueError("code must be a string")
+            raise TypeError("code must be a string")
         if not isinstance(language, str):
-            raise ValueError("language must be a string")
+            raise TypeError("language must be a string")
         if timeout_sec is not None and (
             not isinstance(timeout_sec, int) or isinstance(timeout_sec, bool) or timeout_sec < 1
         ):

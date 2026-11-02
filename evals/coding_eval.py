@@ -17,8 +17,6 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import subprocess
-import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -26,9 +24,9 @@ from typing import Any
 from services.agents.tools.code import run_code
 
 __all__ = [
-    "score_prediction",
     "evaluate_coding_records",
     "main",
+    "score_prediction",
 ]
 
 

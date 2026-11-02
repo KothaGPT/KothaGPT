@@ -22,5 +22,5 @@ def load_router_config(path: str | Path | None = None) -> dict:
     with config_path.open("r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
     if not isinstance(data, dict):
-        raise ValueError(f"router config {config_path} must be a mapping")
+        raise TypeError(f"router config {config_path} must be a mapping")
     return data

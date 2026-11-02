@@ -5,13 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from evals.coding_eval import (
+    _extract_code,
     evaluate_coding_records,
     score_prediction,
     syntax_valid,
-    _extract_code,
 )
 
 
