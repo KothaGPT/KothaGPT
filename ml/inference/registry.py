@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 _ALLOWED_QUANT_LEVELS = {"none", "int8", "int4", "bf16"}
 _ALLOWED_STATUSES = {"ready", "research", "deprecated", "offline"}
+
+_TIER_CONFIG_FILES: dict[str, str] = {
+    "kothagpt-nano": "ml/configs/nano.yaml",
+    "kothagpt-small": "ml/configs/small.yaml",
+    "kothagpt-medium": "ml/configs/medium.yaml",
+    "kothagpt-large": "ml/configs/large.yaml",
+}
 
 
 @dataclass
@@ -69,6 +78,17 @@ class ModelRegistry:
                         context_window=16384, quant_level="int4", status="research"),
         ]
         for m in tiers:
+            cfg_file = _TIER_CONFIG_FILES.get(m.id)
+            if cfg_file:
+                p = Path(cfg_file)
+                if p.is_file():
+                    digest = hashlib.sha256(p.read_bytes()).hexdigest()
+                    m = ModelRecord(
+                        id=m.id, name=m.name, version=m.version, family=m.family,
+                        quant_level=m.quant_level, device_profile=m.device_profile,
+                        artifact_path=str(p), digest=digest, status=m.status,
+                        context_window=m.context_window,
+                    )
             self._mem[m.id] = m
 
     def _ensure_table(self, engine) -> None:

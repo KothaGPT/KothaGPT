@@ -18,9 +18,12 @@ router = APIRouter(prefix="/v1/models", tags=["models"])
 
 
 # Production-ready model families exposed via /v1/models, in canonical order.
-# Tiered (nano/medium/large) and research (moe) models are registered but not
+# Tiered models (nano/small/medium/large) are registered with artifact_path and
+# content-addressable digests; research (moe) models are registered but not
 # surfaced here.
-_AVAILABLE_FAMILIES = ["kothagpt", "kothagpt-small", "kothagpt-embed", "kothagpt-rerank"]
+_AVAILABLE_FAMILIES = ["kothagpt-nano", "kothagpt-small", "kothagpt-medium",
+                       "kothagpt-large", "kothagpt", "kothagpt-embed",
+                       "kothagpt-rerank"]
 
 
 @router.get("", response_model=ModelList)
