@@ -300,8 +300,10 @@ def _validate_suite(suite: Any, path: Path) -> None:
             raise _SuiteValidationError(
                 f"{path}: case {case_id!r} has unknown category {category!r}"
             )
-        if not isinstance(case.get("input"), str):
-            raise _SuiteValidationError(f"{path}: case {case_id!r} must have a string 'input'")
+        if not isinstance(case.get("input") or case.get("prompt"), str):
+            raise _SuiteValidationError(
+                f"{path}: case {case_id!r} must have a string 'input' or 'prompt'"
+            )
         expect = case.get("expect")
         if expect not in _CASE_EXPECTATIONS[controls[category]]:
             raise _SuiteValidationError(
@@ -555,6 +557,8 @@ def run_suite(
     per_category: dict[str, list[dict[str, Any]]] = {}
     categories = suite.get("categories") or {}
     for case in suite.get("cases") or []:
+        if "input" not in case and isinstance(case.get("prompt"), str):
+            case["input"] = case["prompt"]
         control = categories[case["category"]]["control"]
         observed = _case_outcome(control, case["input"], case)
         passed = observed == case["expect"]
