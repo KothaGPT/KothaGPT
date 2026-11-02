@@ -14,7 +14,7 @@ bootstrap:
 dev: | $(VENV)
 	$(PYTHON) -m uvicorn services.api.app:app --reload --host 0.0.0.0 --port 8000
 
-.PHONY: bootstrap-check
+.PHONY: bootstrap-check doctor
 
 bootstrap-check: | $(VENV)
 	bash -n scripts/bootstrap.sh scripts/lib/bootstrap_common.sh \
@@ -29,6 +29,9 @@ bootstrap-check: | $(VENV)
 	./scripts/bootstrap.sh --dry-run --platform macos
 	./scripts/bootstrap.sh --dry-run --platform windows
 	$(PYTHON) -m pytest tests/test_bootstrap.py
+
+doctor: | $(VENV)
+	$(PYTHON) -m scripts.doctor
 
 data: | $(VENV)
 	$(PYTHON) -m data.pipeline.cli run
@@ -61,6 +64,13 @@ data-validate: | $(VENV)
 	@echo "Running data validation checks..."
 	$(PYTHON) -m data.pipeline.cli version
 
+# KGPT-003: Dataset provenance registry management.
+dataset-registry: | $(VENV)
+	$(PYTHON) -m data.pipeline.cli sources list
+
+dataset-registry-check: | $(VENV)
+	$(PYTHON) -m data.pipeline.cli sources check $(SOURCES)
+
 # WS-1/WS-2: pre-tokenize the processed corpus into uint32 block shards so
 # training never re-tokenizes. Idempotent; run again to regenerate.
 data-tokenize: | $(VENV)
@@ -69,6 +79,12 @@ data-tokenize: | $(VENV)
 		--tokenizer ml/tokenizer/artifacts/best \
 		--block-size 4096 \
 		--out data/tokenized
+
+# WS-2: MoE training recipe smoke (Phase B). Exercises the sparse MoE block
+# forward/backward path with the auxiliary load-balancing loss and a lower LR
+# for MoE params.
+moe-smoke: | $(VENV)
+	$(PYTHON) -m ml.models.moe.train
 
 # WS-5: CPU smoke training. Tokenize at the smoke model's context (512) so
 # block size matches max_position_embeddings, then run a short CPU training
@@ -90,6 +106,7 @@ train-smoke: data-tokenize-smoke | $(VENV)
 gpu-env: | $(VENV)
 	@echo "Installing training dependencies from ml/requirements.txt..."
 	@echo "CUDA-specific PyTorch wheels are selected by the host environment; no CI index is forced."
+	@$(PYTHON) -m pip --version >/dev/null 2>&1 || $(PYTHON) -m ensurepip --upgrade
 	$(PYTHON) -m pip install -r ml/requirements.txt
 
 gpu-verify: | $(VENV)
@@ -112,7 +129,7 @@ ci-data-build: | $(VENV)
 		--out-root data/processed \
 		--version-label ci-smoke \
 		--min-chars 1 --max-chars 1000000 --min-words 1 \
-		--no-gzip
+		--no-gzip --dev-bypass
 
 ci-tokenizer-build: | $(VENV)
 	$(PYTHON) -m ml.tokenizer.cli train \
@@ -141,6 +158,64 @@ tokenizer-bench: | $(VENV)
 eval-bangla: | $(VENV)
 	$(PYTHON) -m evals.run --suite evals/suites/bangla.yaml
 
+# KGPT-005: dialect, code-switching, transliteration, and noisy-input coverage.
+eval-bangla-robustness: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/bangla-robustness.yaml \
+		--split all --name bangla-robustness
+
+eval-hallucination: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/hallucination.yaml \
+		--data-dir data/benchmarks/hallucination/v1 \
+		--name hallucination
+
+# WS-4 — Preference evaluation (rule-based judge on chosen/rejected/reference).
+eval-preference: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/preference.yaml \
+		--name preference
+
+# WS-7 — Helpfulness baseline on answerability, reference coverage, and length fit.
+eval-helpfulness: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/helpfulness.yaml \
+		--name helpfulness
+
+# WS-8 — Bangla script and reference-similarity quality baseline.
+eval-bangla-quality: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/bangla-quality.yaml \
+		--name bangla-quality
+
+# WS-5 — Semantic consistency (lexical NLI proxy) on grounded QA.
+eval-semantic: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/hallucination.yaml \
+		--data-dir data/benchmarks/hallucination/v1 \
+		--name semantic
+
+# WS-6 — Safety gate: harmful prompts refused, benign answered.
+eval-safety: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/safety.yaml \
+		--name safety
+
+# WS-9 — Calibrated refusal (answer | refuse | partial).
+eval-refusal: | $(VENV)
+	$(PYTHON) -m evals.run \
+		--suite evals/suites/refusal.yaml \
+		--name refusal
+
+# WS-4..WS-9 — preference alignment eval battery.
+eval-alignment: | $(VENV)
+	$(MAKE) eval-preference
+	$(MAKE) eval-hallucination
+	$(MAKE) eval-safety
+	$(MAKE) eval-helpfulness
+	$(MAKE) eval-bangla-quality
+	$(MAKE) eval-refusal
+
 # Instruction tuning: validate records and run completion-only SFT.
 sft-smoke: | $(VENV)
 	$(PYTHON) -m ml.instruction.sft \
@@ -149,13 +224,17 @@ sft-smoke: | $(VENV)
 		--config ml/configs/smoke.yaml \
 		--device cpu --max-steps 1 --out ml/sft/artifacts/smoke
 
-# WS-3..WS-6: variant-aware SFT training via ml/sft (bn/en/multilingual/code)
-sft-train: | $(VENV)
+# WS-3..WS-6: train SFT from an explicit instruction dataset and base checkpoint.
+sft-train: gpu-env | $(VENV)
 	$(eval _SFT_CFG := $(if $(wildcard ml/configs/sft-$(variant).yaml),ml/configs/sft-$(variant).yaml,ml/configs/sft.yaml))
-	$(eval _TRAIN_DATA := $(or $(train_data),$(TRAIN_DATA),tests/fixtures/instruction.jsonl))
-	@test -f $(_TRAIN_DATA) || { echo "train data not found: $(_TRAIN_DATA)"; exit 1; }
-	$(PYTHON) -c "from ml.instruction.dataset import load_jsonl; recs=load_jsonl('$(_TRAIN_DATA)'); assert recs, 'no records'; print(f'sft-train: {len(recs)} records from $(_TRAIN_DATA)')"
-	$(PYTHON) -m ml.sft.cli --train $(_TRAIN_DATA) --tokenizer ml/tokenizer/artifacts/best --config $(_SFT_CFG) --max-steps 20 --out ml/sft/artifacts/$(or $(variant),run) $(if $(base),--base $(base))
+	$(eval _TRAIN_DATA := $(or $(train_data),$(TRAIN_DATA)))
+	$(eval _SFT_OUT := $(or $(out),ml/sft/artifacts/$(or $(variant),run)))
+	@test -n "$(_TRAIN_DATA)" || { echo "set train_data=/path/to/instruction.jsonl"; exit 2; }
+	@test -f "$(_TRAIN_DATA)" || { echo "train data not found: $(_TRAIN_DATA)"; exit 1; }
+	@test -n "$(base)" || { echo "set base=/path/to/pretrained/checkpoint.pt"; exit 2; }
+	@test -f "$(base)" || { echo "base checkpoint not found: $(base)"; exit 1; }
+	$(PYTHON) -c "from ml.instruction.dataset import load_jsonl; recs=load_jsonl('$(_TRAIN_DATA)'); print(f'sft-train: {len(recs)} records from $(_TRAIN_DATA)')"
+	$(PYTHON) -m ml.sft.cli --train "$(_TRAIN_DATA)" --tokenizer "$(or $(tokenizer),ml/tokenizer/artifacts/best)" --config "$(_SFT_CFG)" $(if $(steps),--max-steps $(steps)) --device $(or $(device),cpu) --out "$(_SFT_OUT)" --base "$(base)"
 
 sft-eval: | $(VENV)
 	$(PYTHON) -m evals.sft \
@@ -163,7 +242,46 @@ sft-eval: | $(VENV)
 		--predictions tests/fixtures/instruction.predictions.json \
 		--out evals/results/sft
 
-eval-sft: sft-eval
+SFT_FAMILIES := bn en multilingual code reasoning conversation fc tool-use
+SFT_EVAL_OUT ?= evals/results
+
+.PHONY: eval-sft eval-sft-ci sft-train sft-gate sft-real
+eval-sft: | $(VENV)
+	@set -e; for family in $(SFT_FAMILIES); do \
+		$(PYTHON) -m evals.run \
+			--suite evals/suites/sft-$$family.yaml \
+			--split dev --out-dir "$(SFT_EVAL_OUT)" --name sft-$$family; \
+	done
+
+eval-sft-ci: | $(VENV)
+	$(PYTHON) -m pytest tests/test_sft_suites.py tests/test_sft_benchmarks.py tests/test_sft_model_target.py -q
+	$(MAKE) eval-sft SFT_EVAL_OUT=/tmp/kothagpt-sft-evals
+
+sft-gate: gpu-env | $(VENV)
+	@test -n "$(base)" || { echo "set base=/path/to/pretrained/artifact"; exit 2; }
+	@test -n "$(candidate)" || { echo "set candidate=ml/sft/artifacts/run"; exit 2; }
+	$(PYTHON) -m evals.sft_gate \
+		--base "$(base)" --candidate "$(candidate)" \
+		--tokenizer "$(or $(tokenizer),ml/tokenizer/artifacts/best)" \
+		--device $(or $(device),cpu) --split $(or $(split),test) \
+		$(if $(eval_data),--data-dir "$(eval_data)") \
+		--out "$(or $(gate_out),evals/results/sft-model-gate.json)"
+
+sft-real:
+	@test -n "$(train_data)" || { echo "set train_data=/path/to/instruction.jsonl"; exit 2; }
+	@test -n "$(base)" || { echo "set base=/path/to/pretrained/checkpoint.pt"; exit 2; }
+	@test -n "$(eval_data)" || { echo "set eval_data=/path/to/held-out-sft-benchmarks"; exit 2; }
+	@test -d "$(eval_data)" || { echo "evaluation data directory not found: $(eval_data)"; exit 1; }
+	@for family in $(SFT_FAMILIES); do \
+		test -f "$(eval_data)/sft-$$family.jsonl" || { echo "missing evaluation set: $(eval_data)/sft-$$family.jsonl"; exit 1; }; \
+	done
+	$(MAKE) sft-train variant=$(variant) train_data="$(train_data)" base="$(base)" \
+		tokenizer="$(tokenizer)" device=$(device) steps=$(steps) out="$(or $(out),ml/sft/artifacts/$(or $(variant),run))"
+	$(MAKE) sft-gate base="$(base)" candidate="$(or $(out),ml/sft/artifacts/$(or $(variant),run))" \
+		tokenizer="$(tokenizer)" device=$(device) split=$(split) eval_data="$(eval_data)" gate_out="$(gate_out)"
+
+sft-benchmark-build:
+	$(PYTHON) -m data.benchmarks.sft
 
 # Preference alignment smoke (WS-1/3)
 preference-smoke: | $(VENV)
@@ -208,9 +326,100 @@ eval-sft-vs-base: | $(VENV)
 	$(PYTHON) -m evals.sft_vs_base --records tests/fixtures/instruction.jsonl --base tests/fixtures/instruction.predictions.json --sft tests/fixtures/instruction.predictions.json --out evals/results/sft_vs_base.json
 	cat evals/results/sft_vs_base.json
 
+# WS-1: validate every tier config file loads and passes ModelConfig.validate().
+config-validate: | $(VENV)
+	$(PYTHON) -c "from pathlib import Path; from ml.models.tier import TIER_CONFIGS; from ml.models.config import load_config; [print(f'OK  {p}') or load_config(Path(p)) for p in TIER_CONFIGS.values()]"
+
+# WS-5: model routing efficiency eval (cost/performance balance).
+eval-routing: | $(VENV)
+	$(PYTHON) -m evals.run --suite evals/suites/routing.yaml --split all --out-dir evals/results --name routing
+
+# WS-3: reasoning stack eval (math/logic/multihop/commonsense).
+eval-reasoning: | $(VENV)
+	$(PYTHON) -m evals.run --suite evals/suites/reasoning.yaml --split all --out-dir evals/results --name reasoning
+
+# WS-3: coding stack eval (function synthesis/bug fix/explanation/bangla comment).
+eval-coding: | $(VENV)
+	$(PYTHON) -m evals.run --suite evals/suites/coding.yaml --split all --out-dir evals/results --name coding
+
+# WS-4: multimodal pipeline eval (vision/audio/document + safety refusal).
+eval-multimodal: | $(VENV)
+	$(PYTHON) -m evals.run --suite evals/suites/multimodal.yaml --split all --out-dir evals/results --name multimodal
+
+# WS-6: regression gate — run every suite against the mock target and fail on
+# any regression vs. the frozen baseline in evals/results/baseline.json.
+BASELINE ?= evals/results/baseline.json
+eval-regress: | $(VENV)
+	$(PYTHON) -m evals.run --suite evals/suites/bangla.yaml --split all --target mock --out-dir /tmp/kothagpt-regress --name regress-bangla
+	$(PYTHON) -m evals.run --suite evals/suites/sft-bn.yaml --split all --target mock --out-dir /tmp/kothagpt-regress --name regress-sft-bn
+	$(PYTHON) -m evals.run --suite evals/suites/sft-en.yaml --split all --target mock --out-dir /tmp/kothagpt-regress --name regress-sft-en
+	$(PYTHON) -m evals.run --suite evals/suites/sft-code.yaml --split all --target mock --out-dir /tmp/kothagpt-regress --name regress-sft-code
+	$(PYTHON) -m evals.run --suite evals/suites/sft-reasoning.yaml --split all --target mock --out-dir /tmp/kothagpt-regress --name regress-sft-reasoning
+	$(PYTHON) -m evals.run --suite evals/suites/tier-nano.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-tier-nano
+	$(PYTHON) -m evals.run --suite evals/suites/tier-small.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-tier-small
+	$(PYTHON) -m evals.run --suite evals/suites/tier-medium.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-tier-medium
+	$(PYTHON) -m evals.run --suite evals/suites/tier-large.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-tier-large
+	$(PYTHON) -m evals.run --suite evals/suites/adversarial.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-adversarial
+	$(PYTHON) -m evals.run --suite evals/suites/redteam.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-redteam
+	$(PYTHON) -m evals.run --suite evals/suites/routing.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-routing
+	$(PYTHON) -m evals.run --suite evals/suites/reasoning.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-reasoning
+	$(PYTHON) -m evals.run --suite evals/suites/coding.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-coding
+	$(PYTHON) -m evals.run --suite evals/suites/multimodal.yaml --target mock --out-dir /tmp/kothagpt-regress --name regress-multimodal
+
+# WS-6: full evaluation suite (all suites, mock target). Use eval-regress for
+# the regression gate against a frozen baseline.
+eval-all: | $(VENV)
+	$(MAKE) eval-bangla
+	$(MAKE) eval-bangla-robustness
+	$(MAKE) eval-sft
+	$(MAKE) eval-routing
+	$(MAKE) eval-reasoning
+	$(MAKE) eval-coding
+	$(MAKE) eval-multimodal
+	$(MAKE) eval-tier TIER=nano
+	$(MAKE) eval-tier TIER=small
+	$(MAKE) eval-tier TIER=medium
+	$(MAKE) eval-tier TIER=large
+	$(MAKE) eval-adversarial
+	$(MAKE) eval-redteam
+
 # Auto review & verify the implementation plans in docs/ (structure + links).
 plans-check: | $(VENV)
 	$(PYTHON) scripts/check_plans.py
+
+# KGPT-004: Release-grade benchmark gate. Compares a candidate eval result
+# against a frozen baseline and fails on critical regressions.
+eval-gate: | $(VENV)
+	$(PYTHON) -m evals.gate --candidate $(CANDIDATE) --baseline $(BASELINE) $(if $(JSON_OUT),--json-out $(JSON_OUT))
+
+# WS-6 tier-aware evaluation and release gates.
+TIER ?= nano
+EVAL_TARGET ?= mock
+EVAL_ARGS ?=
+.PHONY: eval-tier eval-tier-gate eval-adversarial eval-redteam
+eval-tier: | $(VENV)
+	$(PYTHON) -m evals.tier_gate \
+		--suite evals/suites/tier-$(TIER).yaml \
+		--target $(EVAL_TARGET) $(EVAL_ARGS)
+
+eval-tier-gate: | $(VENV)
+	@test -n "$(BASELINE)" || (echo "set BASELINE to a reviewed tier result JSON" >&2; exit 2)
+	$(PYTHON) -m evals.tier_gate \
+		--suite evals/suites/tier-$(TIER).yaml \
+		--target $(EVAL_TARGET) --baseline "$(BASELINE)" $(EVAL_ARGS)
+
+eval-adversarial: | $(VENV)
+	$(PYTHON) -m evals.adversarial --target $(EVAL_TARGET) \
+		$(if $(BASELINE),--baseline "$(BASELINE)") $(EVAL_ARGS)
+
+eval-redteam: | $(VENV)
+	$(PYTHON) -m evals.redteam --target $(EVAL_TARGET) \
+		$(if $(BASELINE),--baseline "$(BASELINE)") $(EVAL_ARGS)
+
+# KGPT-001: Repository baseline validation — verifies the install path,
+# required files, tokenizer artifact, model registry, and Makefile targets.
+baseline: | $(VENV)
+	$(PYTHON) -m scripts.baseline
 
 # WS-1/WS-6: retrain on the normalized corpus and freeze tokenizer + vocab
 # (artifacts/best/, vocab/, DECISION.md). On real data use the target vocab

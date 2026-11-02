@@ -5,6 +5,7 @@ Usage:
     python -m data.pipeline.cli normalize FILE
     python -m data.pipeline.cli check TEXT
     python -m data.pipeline.cli version
+    python -m data.pipeline.cli sources [list|check]
 """
 
 from __future__ import annotations
@@ -14,13 +15,23 @@ import json
 import sys
 from pathlib import Path
 
+from data.manifest import (
+    DatasetRegistry,
+    DatasetSource,
+    get_registry,
+    load_manifest,
+    load_registry,
+    register_manifest,
+    save_registry,
+)
 from data.pipeline import normalize as norm
 from data.pipeline import quality
 from data.pipeline.config import PipelineConfig, run_pipeline
+from data.pipeline.instruction import run_instruction_pipeline
 
 _MAIN = (
     "raw -> normalize -> quality filter -> deduplicate -> train/validation "
-    "split -> stats -> versioned shards"
+    "and test split -> stats -> versioned shards"
 )
 
 
@@ -124,8 +135,46 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Bloom filter false-positive rate in (0, 1)",
     )
     run_p.add_argument("--validation-ratio", type=float, default=0.02)
+    run_p.add_argument(
+        "--test-ratio",
+        type=float,
+        default=0.01,
+        help="held-out test fraction in [0,1); set to 0 to disable the test split",
+    )
     run_p.add_argument("--shard-size", type=int, default=100_000)
     run_p.add_argument("--no-gzip", action="store_true")
+    run_p.add_argument(
+        "--dev-bypass",
+        action="store_true",
+        help="permissive development bypass: skip source-provenance checks "
+        "(explicit opt-in; production fails closed by default)",
+    )
+
+    instruction_p = sub.add_parser(
+        "instruction", help="Build quality-gated, versioned instruction shards."
+    )
+    instruction_sub = instruction_p.add_subparsers(dest="instruction_command", required=True)
+    instruction_run = instruction_sub.add_parser("run", help="Process curated instruction JSONL.")
+    instruction_run.add_argument("input", help="JSONL records with messages or instruction/output")
+    instruction_run.add_argument("--out-root", default="data/processed")
+    instruction_run.add_argument("--version-label", default=None)
+    instruction_run.add_argument("--min-score", type=float, default=0.5)
+    instruction_run.add_argument("--validation-ratio", type=float, default=0.02)
+    instruction_run.add_argument("--test-ratio", type=float, default=0.01)
+    instruction_run.add_argument("--min-chars", type=int, default=1)
+    instruction_run.add_argument("--max-chars", type=int, default=1_000_000)
+    instruction_run.add_argument("--min-words", type=int, default=1)
+    instruction_run.add_argument("--near-dedup", action="store_true")
+    instruction_run.add_argument("--no-spam-check", action="store_true")
+    instruction_run.add_argument("--no-toxic-check", action="store_true")
+    instruction_run.add_argument("--pii-mode", choices=("drop", "mask"), default="drop")
+    instruction_run.add_argument("--copyrighted-titles", default=None)
+    instruction_run.add_argument("--registry", default=None)
+    instruction_run.add_argument(
+        "--dev-bypass",
+        action="store_true",
+        help="allow unregistered sources (licenses are still required and checked)",
+    )
 
     norm_p = sub.add_parser("normalize", help="Normalize a text file or stdin.")
     norm_p.add_argument("file", nargs="?", default="-")
@@ -140,6 +189,79 @@ def _build_parser() -> argparse.ArgumentParser:
 
     version_p = sub.add_parser("version", help="Show the CURRENT dataset version.")
     version_p.add_argument("--out-root", default="data/processed")
+
+    sources_p = sub.add_parser(
+        "sources",
+        help="Manage the dataset provenance registry (KGPT-003).",
+    )
+    sources_sub = sources_p.add_subparsers(dest="sources_command", required=True)
+    sources_list = sources_sub.add_parser("list", help="List registered sources.")
+    sources_list.add_argument("--registry", default=None)
+    sources_check = sources_sub.add_parser("check", help="Check whether sources are allowed.")
+    sources_check.add_argument("--registry", default=None)
+    sources_check.add_argument(
+        "sources", nargs="*", help="source names to check"
+    )
+    sources_add = sources_sub.add_parser("add", help="Register a new source.")
+    sources_add.add_argument("--registry", default="data/processed/registry.json")
+    sources_add.add_argument("--name", required=True)
+    sources_add.add_argument("--url", required=True)
+    sources_add.add_argument("--license", required=True)
+    sources_add.add_argument("--provenance", default="")
+    sources_add.add_argument("--notes", default="")
+    sources_add.add_argument("--no-training", action="store_true")
+    sources_add.add_argument("--no-distribution", action="store_true")
+
+    manifest_p = sub.add_parser(
+        "manifest",
+        help="Validate and register the corpora manifest (KGPT-003 / issue #8).",
+    )
+    manifest_sub = manifest_p.add_subparsers(dest="manifest_command", required=True)
+    manifest_validate = manifest_sub.add_parser(
+        "validate", help="Validate the corpora manifest (licenses + provenance)."
+    )
+    manifest_validate.add_argument(
+        "--manifest",
+        default=str(Path(__file__).resolve().parent.parent / "scripts" / "corpora.manifest.json"),
+    )
+    manifest_validate.add_argument(
+        "--registry",
+        default=None,
+        help="registry path for license allowlist checks (default: in-memory registry)",
+    )
+    manifest_validate.add_argument(
+        "--strict",
+        action="store_true",
+        default=True,
+        help="production mode: fail on invalid entries (default on)",
+    )
+    manifest_validate.add_argument(
+        "--no-strict",
+        action="store_true",
+        help="development bypass: report invalid entries instead of failing",
+    )
+    manifest_register = manifest_sub.add_parser(
+        "register", help="Register manifest sources into the provenance registry."
+    )
+    manifest_register.add_argument(
+        "--manifest",
+        default=str(Path(__file__).resolve().parent.parent / "scripts" / "corpora.manifest.json"),
+    )
+    manifest_register.add_argument(
+        "--registry",
+        default="data/processed/registry.json",
+    )
+    manifest_register.add_argument(
+        "--strict",
+        action="store_true",
+        default=True,
+        help="production mode: fail on invalid entries (default on)",
+    )
+    manifest_register.add_argument(
+        "--no-strict",
+        action="store_true",
+        help="development bypass: skip invalid entries instead of failing",
+    )
 
     return parser
 
@@ -194,6 +316,7 @@ def _cmd_version(args: argparse.Namespace) -> int:
         print(f"docs (after dedup): {counts.get('after_dedup', 'n/a')}")
         print(f"train: {counts.get('train', 'n/a')}")
         print(f"validation: {counts.get('validation', 'n/a')}")
+        print(f"test: {counts.get('test', 'n/a')}")
         print(f"manifest: {manifest}")
     return 0
 
@@ -232,8 +355,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
         dedup_bloom_capacity=args.bloom_capacity,
         dedup_bloom_fp_rate=args.bloom_fp_rate,
         validation_ratio=args.validation_ratio,
+        test_ratio=args.test_ratio,
         shard_size=args.shard_size,
         gzip_output=not args.no_gzip,
+        strict=not args.dev_bypass,
     )
     summary = run_pipeline(cfg)
     print(f"Pipeline complete: {_MAIN}")
@@ -251,22 +376,167 @@ def _cmd_run(args: argparse.Namespace) -> int:
             f"(exact {dedup_counts['removed_exact']:,}, "
             f"near {dedup_counts['removed_near']:,})"
         )
-    print(f"  train / val:     {summary['train']:,} / {summary['validation']:,}")
+    print(
+        f"  train / val / test: {summary['train']:,} / "
+        f"{summary['validation']:,} / {summary['test']:,}"
+    )
     print(f"  version id:      {summary['version_id']}")
     print(f"  manifest:        {summary['manifest']}")
     return 0
+
+
+def _cmd_instruction(args: argparse.Namespace) -> int:
+    if args.instruction_command != "run":
+        raise AssertionError(f"unhandled instruction command {args.instruction_command}")
+    registry = load_registry(args.registry) if args.registry else get_registry()
+    summary = run_instruction_pipeline(
+        args.input,
+        args.out_root,
+        min_score=args.min_score,
+        validation_ratio=args.validation_ratio,
+        test_ratio=args.test_ratio,
+        min_chars=args.min_chars,
+        max_chars=args.max_chars,
+        min_words=args.min_words,
+        near_dedup=args.near_dedup,
+        check_spam=not args.no_spam_check,
+        check_toxic=not args.no_toxic_check,
+        pii_mode=args.pii_mode,
+        strict=not args.dev_bypass,
+        version_label=args.version_label,
+        copyrighted_titles_path=args.copyrighted_titles,
+        registry=registry,
+    )
+    print(f"Instruction pipeline complete: {summary['version_id']}")
+    print(
+        f"  train / validation / test: {summary['train']:,} / "
+        f"{summary['validation']:,} / {summary['test']:,}"
+    )
+    print(f"  quality scores: {summary['quality_scores']['count']:,}")
+    print(f"  manifest: {summary['manifest']}")
+    return 0
+
+
+def _cmd_sources(args: argparse.Namespace) -> int:
+    if args.sources_command == "list":
+        reg = load_registry(args.registry) if args.registry else get_registry()
+        sources = reg.list()
+        if not sources:
+            print("No sources registered.")
+            return 0
+        print(f"{len(sources)} source(s):")
+        for src in sources:
+            ok, reason = reg.is_allowed(src.name)
+            status = "ALLOWED" if ok else f"BLOCKED ({reason})"
+            print(
+                f"  {src.name:<24} license={src.license:<16} "
+                f"training={src.allow_training} {status}"
+            )
+        return 0
+
+    if args.sources_command == "check":
+        reg = load_registry(args.registry) if args.registry else get_registry()
+        if not args.sources:
+            print("no sources specified", file=sys.stderr)
+            return 1
+        failed = False
+        for name in args.sources:
+            ok, reason = reg.is_allowed(name)
+            print(f"{name}: {'OK' if ok else 'BLOCKED'} — {reason}")
+            if not ok:
+                failed = True
+        return 1 if failed else 0
+
+    if args.sources_command == "add":
+        reg = load_registry(args.registry) if args.registry else DatasetRegistry()
+        try:
+            src = DatasetSource(
+                name=args.name,
+                url=args.url,
+                license=args.license,
+                provenance=args.provenance,
+                notes=args.notes,
+                allow_training=not args.no_training,
+                allow_distribution=not args.no_distribution,
+            )
+            reg.register(src)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        out = save_registry(reg, args.registry)
+        print(f"registered {args.name} -> {out}")
+        return 0
+
+    raise AssertionError(f"unhandled sources command {args.sources_command}")
+
+
+def _cmd_manifest(args: argparse.Namespace) -> int:
+    if args.manifest_command == "validate":
+        strict = args.strict and not args.no_strict
+        try:
+            entries = load_manifest(args.manifest)
+        except (FileNotFoundError, TypeError, ValueError) as exc:
+            print(f"manifest validation failed: {exc}", file=sys.stderr)
+            return 1
+        reg = load_registry(args.registry) if args.registry else DatasetRegistry()
+        valid = 0
+        invalid: list[dict[str, str]] = []
+        for entry in entries:
+            reasons: list[str] = []
+            if not reg.allowlist.is_allowed(entry.license):
+                reasons.append(f"license {entry.license!r} not in allowlist")
+            if reg.get(entry.name) is not None:
+                reasons.append(f"source {entry.name!r} already registered")
+            if reasons:
+                invalid.append({"name": entry.name, "reason": "; ".join(reasons)})
+            else:
+                valid += 1
+        print(f"Manifest: {args.manifest}")
+        print(f"  total entries: {len(entries)}")
+        print(f"  valid: {valid}")
+        print(f"  invalid: {len(invalid)}")
+        for item in invalid:
+            print(f"  - {item['name']}: {item['reason']}")
+        if invalid and strict:
+            print("manifest validation FAILED (strict/production mode)", file=sys.stderr)
+            return 1
+        print("manifest validation OK")
+        return 0
+
+    if args.manifest_command == "register":
+        strict = args.strict and not args.no_strict
+        reg = load_registry(args.registry) if args.registry else DatasetRegistry()
+        try:
+            report = register_manifest(reg, args.manifest, strict=strict)
+        except (FileNotFoundError, TypeError, ValueError) as exc:
+            print(f"manifest registration failed: {exc}", file=sys.stderr)
+            return 1
+        out = save_registry(reg, args.registry)
+        print(f"Registered {report['registered']}/{report['total']} source(s) -> {out}")
+        print(f"  rejected: {report['rejected']}")
+        for item in report["rejected_entries"]:
+            print(f"  - {item['name']}: {item['reason']}")
+        return 0
+
+    raise AssertionError(f"unhandled manifest command {args.manifest_command}")
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "run":
         return _cmd_run(args)
+    if args.command == "instruction":
+        return _cmd_instruction(args)
     if args.command == "normalize":
         return _cmd_normalize(args)
     if args.command == "check":
         return _cmd_check(args)
     if args.command == "version":
         return _cmd_version(args)
+    if args.command == "sources":
+        return _cmd_sources(args)
+    if args.command == "manifest":
+        return _cmd_manifest(args)
     raise AssertionError(f"unhandled command {args.command}")
 
 

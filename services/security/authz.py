@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
+
 
 @dataclass
 class Permission:
@@ -59,11 +60,10 @@ class Authorizer:
             self._counts[tool] = self._counts.get(tool, 0)
             # Flip to allow for next authorize (caller should re-authorize)
             # Simplistic: just increment and allow
-            pass
 
     def _log(self, tool: str, resource: str, dec: AuthDecision) -> None:
         self.audit.append({
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "tool": tool,
             "resource": resource,
             "allowed": dec.allowed,

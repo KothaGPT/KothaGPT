@@ -1,4 +1,6 @@
-from services.security.crypto import inventory, is_encrypted, envelope_encrypt, envelope_decrypt
+from services.security.crypto import envelope_decrypt, envelope_encrypt, inventory, is_encrypted
+
+
 def test_inventory():
     inv = inventory()
     assert "postgres" in inv and is_encrypted("postgres")

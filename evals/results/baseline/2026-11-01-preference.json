@@ -1,0 +1,221 @@
+{
+  "suite": "preference",
+  "target": "mock",
+  "split": "all",
+  "date": "2026-11-01",
+  "summary": {
+    "preference": {
+      "instances": 7,
+      "metrics": {
+        "chosen_score": {
+          "mean": 1.0,
+          "std": 0.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "lose": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0
+        },
+        "rejected_score": {
+          "mean": 0.5085497835497835,
+          "std": 0.32381341222171667,
+          "ci_low": 0.26866545077052995,
+          "ci_high": 0.7484341163290371
+        },
+        "tie": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0
+        },
+        "win": {
+          "mean": 1.0,
+          "std": 0.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        }
+      }
+    }
+  },
+  "families": {
+    "preference": {
+      "bn_instruction": {
+        "instances": 3,
+        "metrics": {
+          "chosen_score": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "lose": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "rejected_score": {
+            "mean": 0.2,
+            "std": 0.2,
+            "ci_low": -0.026321305522333305,
+            "ci_high": 0.4263213055223333
+          },
+          "tie": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "win": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          }
+        }
+      },
+      "en_instruction": {
+        "instances": 4,
+        "metrics": {
+          "chosen_score": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "lose": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "rejected_score": {
+            "mean": 0.7399621212121212,
+            "std": 0.1282122832555217,
+            "ci_low": 0.61431408362171,
+            "ci_high": 0.8656101588025324
+          },
+          "tie": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "win": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          }
+        }
+      }
+    }
+  },
+  "tasks": {
+    "preference": [
+      {
+        "record_id": "pref:bn:0",
+        "split": "dev",
+        "family": "bn_instruction",
+        "prediction": "শুভেচ্ছা! কেমন আছেন?",
+        "reference": "শুভেচ্ছা! কেমন আছেন?",
+        "scores": {
+          "win": 1.0,
+          "tie": 0.0,
+          "lose": 0.0,
+          "chosen_score": 1.0,
+          "rejected_score": 0.0
+        }
+      },
+      {
+        "record_id": "pref:bn:1",
+        "split": "dev",
+        "family": "bn_instruction",
+        "prediction": "ঢাকা বাংলাদেশের রাজধানী",
+        "reference": "ঢাকা বাংলাদেশের রাজধানী",
+        "scores": {
+          "win": 1.0,
+          "tie": 0.0,
+          "lose": 0.0,
+          "chosen_score": 1.0,
+          "rejected_score": 0.4
+        }
+      },
+      {
+        "record_id": "pref:bn:2",
+        "split": "dev",
+        "family": "bn_instruction",
+        "prediction": "গরমকালে তাপমাত্রা বেশি থাকে এবং মানুষ তাড়াতাড়ি ক্লান্ত হয়।",
+        "reference": "গরমকালে তাপমাত্রা বেশি থাকে এবং মানুষ তাড়াতাড়ি ক্লান্ত হয়।",
+        "scores": {
+          "win": 1.0,
+          "tie": 0.0,
+          "lose": 0.0,
+          "chosen_score": 1.0,
+          "rejected_score": 0.2
+        }
+      },
+      {
+        "record_id": "pref:en:0",
+        "split": "dev",
+        "family": "en_instruction",
+        "prediction": "2 + 2 equals 4.",
+        "reference": "2 + 2 equals 4.",
+        "scores": {
+          "win": 1.0,
+          "tie": 0.0,
+          "lose": 0.0,
+          "chosen_score": 1.0,
+          "rejected_score": 0.6666666666666666
+        }
+      },
+      {
+        "record_id": "pref:en:1",
+        "split": "dev",
+        "family": "en_instruction",
+        "prediction": "The capital of France is Paris.",
+        "reference": "The capital of France is Paris.",
+        "scores": {
+          "win": 1.0,
+          "tie": 0.0,
+          "lose": 0.0,
+          "chosen_score": 1.0,
+          "rejected_score": 0.8181818181818182
+        }
+      },
+      {
+        "record_id": "pref:en:2",
+        "split": "dev",
+        "family": "en_instruction",
+        "prediction": "Water freezes into ice at 0 degrees Celsius.",
+        "reference": "Water freezes into ice at 0 degrees Celsius.",
+        "scores": {
+          "win": 1.0,
+          "tie": 0.0,
+          "lose": 0.0,
+          "chosen_score": 1.0,
+          "rejected_score": 0.6
+        }
+      },
+      {
+        "record_id": "pref:en:3",
+        "split": "test",
+        "family": "en_instruction",
+        "prediction": "Jupiter is the largest planet in the solar system.",
+        "reference": "Jupiter is the largest planet in the solar system.",
+        "scores": {
+          "win": 1.0,
+          "tie": 0.0,
+          "lose": 0.0,
+          "chosen_score": 1.0,
+          "rejected_score": 0.875
+        }
+      }
+    ]
+  },
+  "cases": [],
+  "cases_by_category": {}
+}

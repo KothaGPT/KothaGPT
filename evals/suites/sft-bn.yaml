@@ -1,0 +1,10 @@
+name: sft-bn
+version: v1
+data_dir: ../../data/benchmarks/sft/v1
+tasks:
+  - sft-bn
+metrics:
+  - exact_match
+  - normalized_match
+  - language_correct
+  - bengali_script_ratio

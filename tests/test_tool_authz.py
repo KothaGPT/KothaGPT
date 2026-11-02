@@ -1,5 +1,6 @@
 from services.security.authz import Authorizer, Permission
 
+
 def test_allow():
     a = Authorizer([Permission("calc")])
     assert a.authorize("calc").allowed

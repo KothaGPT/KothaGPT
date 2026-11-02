@@ -21,6 +21,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from .robustness import build_robustness
+
 _OUT_DIR = Path(__file__).parent / "v1"
 
 # dev/test split: first 80% of the hash space -> dev.
@@ -1176,6 +1178,7 @@ _BUILDERS = {
     "bangla_translation": (build_translation, 1110),
     "bangla_summarization": (build_summarization, 104),
     "bangla_generation": (build_generation, 26),
+    "bangla_robustness": (build_robustness, 24),
 }
 
 

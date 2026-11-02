@@ -1,6 +1,11 @@
 """SFT package (WS-2)."""
 
-from .templates import apply_chat_template, check_tokenizer_coverage, get_template, parse_chat_template
+from .templates import (
+    apply_chat_template,
+    check_tokenizer_coverage,
+    get_template,
+    parse_chat_template,
+)
 
 try:
     from .dataset import SFTDataset, SFTMix, load_mix
@@ -11,10 +16,10 @@ except ImportError as _e:  # torch not installed in API env
 __all__ = [
     "SFTDataset",
     "SFTMix",
-    "load_mix",
     "apply_chat_template",
-    "parse_chat_template",
-    "get_template",
     "check_tokenizer_coverage",
+    "get_template",
+    "load_mix",
+    "parse_chat_template",
     "run_sft_trainer",
 ]

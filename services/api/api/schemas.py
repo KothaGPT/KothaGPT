@@ -22,11 +22,36 @@ class Model(BaseModel):
     owned_by: str = "kothagpt"
     description: str = ""
     context_window: int = 8192
+    status: Literal["ready", "research", "deprecated", "offline"] | str = "ready"
 
 
 class ModelList(BaseModel):
     object: str = "list"
     data: list[Model]
+
+
+class BackendCapability(BaseModel):
+    chat: bool = True
+    streaming: bool = True
+    embeddings: bool = True
+    rerank: bool = True
+    tools: bool = True
+    agents: bool = True
+    websocket: bool = True
+
+
+class BackendInfo(BaseModel):
+    name: str
+    capabilities: BackendCapability
+    kind: str = "example"
+    status: str = "not_configured"
+    production: bool = False
+    notes: str = ""
+
+
+class BackendList(BaseModel):
+    object: str = "list"
+    data: list[BackendInfo]
 
 
 class FunctionDefinition(BaseModel):

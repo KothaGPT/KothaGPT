@@ -1,0 +1,4 @@
+{"instruction": "২ + ৩ কত? শুধু উত্তর দিন।", "output": "৫", "language": "bn", "category": "instruction", "metadata": {"record_id": "sft-bn:001", "family": "sft-bn", "split": "dev"}}
+{"instruction": "বাংলাদেশের রাজধানীর নাম কী?", "output": "বাংলাদেশের রাজধানী ঢাকা।", "language": "bn", "category": "instruction", "metadata": {"record_id": "sft-bn:002", "family": "sft-bn", "split": "dev"}}
+{"instruction": "একটি বাক্যে বলুন, পানি ০° সেলসিয়াসে কী অবস্থায় থাকে।", "output": "০° সেলসিয়াসে পানি জমে বরফ হয়।", "language": "bn", "category": "instruction", "metadata": {"record_id": "sft-bn:003", "family": "sft-bn", "split": "dev"}}
+{"instruction": "পাঁচটি আম থেকে দুটি আম দিলে কয়টি আম থাকে?", "output": "পাঁচটি আম থেকে দুটি দিলে তিনটি আম থাকে।", "language": "bn", "category": "instruction", "metadata": {"record_id": "sft-bn:004", "family": "sft-bn", "split": "test"}}

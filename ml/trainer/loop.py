@@ -20,6 +20,7 @@ from .checkpoint import (
     resume,
     save_best_checkpoint,
     save_checkpoint,
+    step_of,
 )
 from .dataset import CausalLMDataset
 from .distributed import DistributedConfig, all_reduce_mean, is_main_rank, unwrap_module, wrap_model
@@ -340,7 +341,8 @@ def train(
                 micro_step(*_collate_batch(train_dataset, indices))
             finalize_step()
 
-    if is_main_rank(rank) and latest_checkpoint(out_dir) is None:
+    latest = latest_checkpoint(out_dir) if is_main_rank(rank) else None
+    if is_main_rank(rank) and (latest is None or step_of(latest) < global_step):
         save_checkpoint(
             out_dir,
             model=unwrap_module(model),

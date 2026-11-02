@@ -1,4 +1,6 @@
 from services.security.pii_guard import detect_pii, mask_pii
+
+
 def test_pii():
     assert detect_pii("test@example.com")["email"]
     assert "EMAIL_REDACTED" in mask_pii("email test@example.com")

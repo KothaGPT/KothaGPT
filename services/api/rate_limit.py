@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 
+
 class RateLimiter:
     def __init__(self, max_requests: int = 60, window_sec: int = 60):
         self.max_requests = max_requests

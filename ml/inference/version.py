@@ -5,15 +5,16 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
 
 @dataclass
 class VersionRecord:
     version: str
     digest: str
     artifact_path: str
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     superseded_by: str | None = None
 
 class VersionManager:

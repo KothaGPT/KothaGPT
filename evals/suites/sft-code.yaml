@@ -1,0 +1,9 @@
+name: sft-code
+version: v1
+data_dir: ../../data/benchmarks/sft/v1
+tasks:
+  - sft-code
+metrics:
+  - exact_match
+  - normalized_match
+  - language_correct

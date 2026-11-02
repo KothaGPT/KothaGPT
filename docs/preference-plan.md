@@ -29,11 +29,11 @@ Guiding principles:
 | Area | Exists | Gaps |
 | --- | --- | --- |
 | SFT checkpoints | `ml/sft/` plan (`docs/sft-plan.md`); chat template + masked-loss tooling specified | SFT not yet run; no aligned-release base |
-| Preference package | `ml/preference/` exists but is empty | whole workstream missing |
+| Preference package | `ml/preference/` — `dataset.py` (`PreferenceRecord`, `load_preference_jsonl`, `split_preference`), `reward.py` (`RewardModel` head on frozen `KothaGPT`), `trainer.py` (`run_dpo`), `cli.py` (`make preference-smoke` green) | real-model RM/DPO baselines, CI gate |
 | Trainer core | `ml/trainer/` loop, checkpoint (atomic/resume), scheduler, monitor, DDP/FSDP, mixed precision | only causal-LM + SFT loss paths; no reward / DPO objectives |
 | Data pipeline | `data/pipeline/` gates + `data/pipeline/schema.py` (role/content) per SFT plan | no preference pair schema, no judge/annotator tooling |
-| Eval | `evals/run.py` + `evals/suites/` (bangla v1, sft* planned) | no preference/safety/hallucination/refusal suites |
-| Configs | `ml/configs/small.yaml`, planned `sft*.yaml` | no reward/dpo configs |
+| Eval | `evals/run.py` + Bangla v1, WS-4 `preference.yaml`, WS-5 `hallucination.yaml`, WS-6 `safety.yaml`, WS-7 `helpfulness.yaml`, WS-8 `bangla-quality.yaml`, WS-9 `refusal.yaml`; deterministic metrics and controls for each suite | real-model baselines, deeper linguistic quality signals, RM-guided win-rate replacing rule-based judge |
+| Configs | `ml/configs/small.yaml`, `sft*.yaml` | no reward/dpo configs |
 
 ---
 
@@ -94,7 +94,7 @@ Goal: preference-tune the SFT model with Direct Preference Optimization.
 
 Goal: measure whether alignment actually follows preference.
 
-- Extend `evals/run.py` with a preference/chat mode: for each eval prompt,
+- Extend `evals/run.py` with a preference mode: for each eval prompt,
   sample N responses from the aligned model; score with the RM (held-out RM,
   not the one used for DPO sampling) + pairwise win-rate vs the SFT baseline.
 - Emit win-rate tables per task family (general, reasoning, coding,
@@ -103,30 +103,35 @@ Goal: measure whether alignment actually follows preference.
 - Metric: aligned model wins ≥ threshold% of pairs vs SFT; per-family win-rates
   reported and no family regresses below base.
 
+Implemented: `evals/suites/preference.yaml` + `data/benchmarks/preference/v1/preference.jsonl`
+(7 triples: 3 bn, 4 en). The `preference` control in `evals/run.py` runs a
+rule-based judge (`preference_judge` in `evals/metrics.py`) over
+(chosen, rejected, reference); a real RM-guided win-rate replaces this baseline
+before release. The suite is target-agnostic: case input is the prompt, and
+chosen/rejected/reference are carried on the case. `make eval-preference`
+runs it green (win rate 1.0 on the baseline triples).
+
 ### WS-5 — Hallucination evaluation (`evals/suites/hallucination.yaml`)
 
 Goal: quantify groundedness so alignment improves factuality, not fluency.
 
-- Build a hallucination suite: extraction/QA prompts with gold contexts
-  (Bangla + English), factual-consistency prompts, and open-ended probes.
-- Score with NLI-style consistency (entailment of answer in context) plus
-  keyword/entity-overlap baselines; report hallucination rate per family.
-- Deliverables: hallucination suite + metric in `evals/metrics.py`.
-- Metric: hallucination rate ≤ threshold on the suite; no worse than SFT base;
-  entity/date/fact spot-checks pass.
+Implemented: `evals/metrics.py` gains `semantic_entailment` (fraction of answer
+content units present in context) and `semantic_contradiction` (1 - entailment),
+a lexical NLI proxy over normalized unigrams/bigrams. `evals/suites/hallucination.yaml`
+now reports `context_token_coverage`, `lexical_unsupported_token_rate`,
+`semantic_entailment`, and `semantic_contradiction` per grounded-QA instance.
+`make eval-hallucination` runs green. Remaining: broader factual-consistency and
+open-ended probes, NLI-style scoring, and aligned-versus-SFT comparisons.
 
 ### WS-6 — Safety evaluation (`evals/suites/safety.yaml`)
 
 Goal: a deterministic safety gate for release.
 
-- Curate safety prompts (toxic, PII-leak, harmful-instruction, self-harm,
-  hate/profanity in Bangla + English) reusing `data/pipeline/toxic.py`
-  blocklists as baselines.
-- Score refusal + non-toxicity: model must refuse harmful requests (see WS-9)
-  and must not emit blocked content on benign prompts.
-- Deliverables: safety suite + pass/fail report.
-- Metric: 100% (or ≥ documented threshold) refusal on harmful prompts; zero
-  toxic output on benign prompts; PII-leak rate zero.
+Implemented: `evals/suites/safety.yaml` (12 cases: 8 harmful, 4 benign) with a
+`safety` control backed by `refusal_classifier`. Harmful-response inputs expect
+`refuse`; benign-response inputs expect `answer`. `make eval-safety` runs green
+(100% pass). Remaining: curate from `data/pipeline/toxic.py` blocklists, add
+PII-leak and self-harm probes, and wire the suite as a hard release gate.
 
 ### WS-7 — Helpfulness evaluation (`evals/suites/helpfulness.yaml`)
 
@@ -141,6 +146,14 @@ Goal: alignment must not trade safety for uselessness.
 - Metric: helpfulness score ≥ threshold; refusal-on-benign rate ≤ threshold;
   no over-verbosity regression vs SFT.
 
+Implemented: `helpfulness_metrics` reports answerability,
+reference-token information sufficiency, verbosity fit, and non-refusal, with
+a composite score. `evals/suites/helpfulness.yaml` exercises useful answers,
+calibrated uncertainty, non-answers, and irrelevant responses through the
+`helpfulness` control (helpful score threshold: 0.75);
+`make eval-helpfulness` writes the suite report. These deterministic lexical
+signals are calibration baselines, not RM or human judgments.
+
 ### WS-8 — Bengali quality evaluation (`evals/suites/bangla-quality.yaml`)
 
 Goal: guarantee alignment improves — never damages — Bangla language quality.
@@ -153,18 +166,24 @@ Goal: guarantee alignment improves — never damages — Bangla language quality
 - Metric: Bengali quality metrics ≥ SFT base and ≥ documented thresholds;
   tokenizer unk rate and decode fidelity stay at 0%/100%.
 
+Implemented: `bangla_quality_metrics` reports Bengali-script ratio, Bengali
+language classification, ROUGE-L reference similarity, and a composite score.
+`evals/suites/bangla-quality.yaml` checks Bengali and romanized/English
+responses through the `bangla_quality` control; `make eval-bangla-quality`
+writes the report (quality score threshold: 0.70). Grammar, register,
+transliteration fidelity, tokenizer efficiency, and aligned-vs-SFT comparisons
+remain future work. These deterministic metrics do not evaluate those areas.
+
 ### WS-9 — Refusal behavior evaluation (`evals/suites/refusal.yaml`)
 
 Goal: calibrated refusal — refuse the harmful, answer the safe.
 
-- Three-way classification of every model response to safety/benign/edge
-  prompts: `answer | refuse | partial`. Tune refusal wording to be calm,
-  specific, and Bangla-first.
-- Report confusion-style table: false refusals (benign → refuse) must stay
-  below threshold; true refusals (harmful → refuse) above threshold.
-- Deliverables: refusal suite + classifier + report.
-- Metric: true-refusal rate ≥ threshold on harmful, false-refusal rate ≤
-  threshold on benign; refusal tone consistent across Bangla/English.
+Implemented: `evals/suites/refusal.yaml` (8 cases: 3 harmful, 3 benign, 2
+partial) with a `refusal` control backed by the three-way
+`refusal_classifier` (`answer | refuse | partial`). Soft refusals that decline
++ offer an alternative are classified `partial`. `make eval-refusal` runs green
+(100% pass). Remaining: confusion-style table, false-refusal/false-answer
+thresholds, refusal-tone calibration across Bangla/English.
 
 ---
 
@@ -210,6 +229,7 @@ make eval-safety                                                 # WS-6
 make eval-helpfulness                                            # WS-7
 make eval-bangla-quality                                         # WS-8
 make eval-refusal                                                # WS-9
+make eval-alignment                                              # WS-4..WS-9
 ```
 
 Never commit model weights or preference shards; `ml/preference/artifacts/` and

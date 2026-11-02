@@ -8,6 +8,7 @@ from pathlib import Path
 from ml.models import KothaGPT, load_config
 from ml.tokenizer import load_tokenizer
 
+
 def run_scale_smoke(config_path: str, tokenizer_path: str, max_steps: int = 5) -> dict:
     cfg = load_config(config_path)
     tok_path = Path(tokenizer_path)

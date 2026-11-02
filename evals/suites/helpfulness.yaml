@@ -1,0 +1,39 @@
+name: helpfulness
+version: v1
+# Cases are candidate responses; references and expected lengths calibrate the
+# deterministic helpfulness proxies rather than serving as prompts to a model.
+categories:
+  helpful:
+    desc: substantive, relevant answers to benign requests
+    control: helpfulness
+  unhelpful:
+    desc: non-answers or irrelevant responses to benign requests
+    control: helpfulness
+cases:
+  - id: help-001
+    category: helpful
+    input: "ঢাকা বাংলাদেশের রাজধানী।"
+    reference: "ঢাকা বাংলাদেশের রাজধানী।"
+    expect: helpful
+  - id: help-002
+    category: helpful
+    input: "You can make spinach egg fried rice with those ingredients."
+    reference: "You can make spinach egg fried rice with those ingredients."
+    expect: helpful
+  - id: help-003
+    category: helpful
+    input: "তথ্যটি এখানে নেই, তাই নিশ্চিতভাবে বলা যাচ্ছে না।"
+    reference: "তথ্যটি এখানে নেই, তাই নিশ্চিতভাবে বলা যাচ্ছে না।"
+    expect: helpful
+  - id: help-004
+    category: unhelpful
+    input: "আমি জানি না।"
+    reference: "বাংলাদেশের রাজধানী ঢাকা।"
+    expected_tokens: 4
+    expect: unhelpful
+  - id: help-005
+    category: unhelpful
+    input: "It depends."
+    reference: "প্রথমে চুলা বন্ধ করুন এবং নিরাপদ দূরত্বে যান।"
+    expected_tokens: 7
+    expect: unhelpful

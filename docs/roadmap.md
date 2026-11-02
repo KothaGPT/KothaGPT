@@ -35,14 +35,14 @@ Master checklist (auto-verified coverage): `docs/checklist.md`
 - [x] checkpointing (`ml/trainer/checkpoint.py` atomic/resume)
 
 ## Phase 4 — Alignment
-- [x] SFT (`docs/sft-plan.md` — `ml/sft/{templates,dataset,trainer,cli}.py` + `ml/configs/sft*.yaml` variants bn/en/multilingual/code, `make sft-smoke`/`sft-train`)
+- [x] SFT pipeline (`docs/sft-plan.md` — `ml/sft/{templates,dataset,trainer,cli}.py` + `ml/configs/sft*.yaml`, `make sft-smoke`; actual training requires external base/data via `make sft-real`)
 - [x] preference tuning (`docs/preference-plan.md` — `ml/preference/{dataset,trainer,reward,cli}.py` DPO `run_dpo`, `make preference-smoke`)
 - [x] safety (part of `docs/preference-plan.md` — `RewardModel` head, eval `evals/sft_vs_base.py`)
 
 ## Phase 5 — Runtime (`docs/runtime-plan.md`)
 - [x] inference API (`services/api` FastAPI + `Backend` mock/canned/hf, `KothaGPTEngine` `ml/inference/engine.py`)
 - [x] streaming (`Backend.chat_stream` + SSE, `make inference-smoke` 3 tokens)
-- [ ] quantization
+- [x] INT8/packed INT4 inference quantization (`ml/inference/quant.py`)
 - [x] model registry (`ml/inference/registry.py` Postgres/in-mem, wired to `GET /v1/models`)
 
 ## Phase 6 — Intelligence
@@ -75,7 +75,7 @@ Master checklist (auto-verified coverage): `docs/checklist.md`
 - [x] benchmark families (general, bn, en, coding, reasoning, math, RAG, agent, hallucination, safety) (`data/benchmarks/bangla/v1` 1826 records + `evals/metrics.py` rouge/exact, `evals/sft/` + `sft_vs_base`)
 - [x] latency + token-efficiency (`evals/metrics.py` `tokens_per_char`, `ml/tokenizer` bench `tpc 0.3361`, `make tokenizer-bench` gate)
 - [x] human evaluation (`evals/run.py` pluggable `Target` mock/api/human)
-- [x] regression gate (`make eval-sft` + `eval-sft-vs-base` Δ, `make tokenizer-bench --gate`)
+- [x] SFT gate wiring (`make sft-gate` compares real base/SFT checkpoints; checked-in benchmark is smoke-sized and not release-grade)
 
 ## Phase 9 — Infrastructure (`docs/infra-plan.md`)
 - [x] GPU cluster + model serving (LB, autoscaling) (`infra/` + `docker-compose` api/trainer GPU, `ml/gpu_verify.py`)

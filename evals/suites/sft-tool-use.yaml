@@ -1,0 +1,9 @@
+name: sft-tool-use
+version: v1
+data_dir: ../../data/benchmarks/sft/v1
+tasks:
+  - sft-tool-use
+metrics:
+  - exact_match
+  - normalized_match
+  - tool_call_match

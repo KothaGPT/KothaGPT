@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import re
-from collections import Counter
 
-_TRIGGER_PATTERNS = [re.compile(r"\bbackdoor\b", re.I), re.compile(r"@@trigger@@")]
+_TRIGGER_PATTERNS = [re.compile(r"\bbackdoor\b", re.IGNORECASE), re.compile(r"@@trigger@@")]
 
 def is_poisoned(text: str, label: str | None = None) -> tuple[bool, str | None]:
     for rx in _TRIGGER_PATTERNS:

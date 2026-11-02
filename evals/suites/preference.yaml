@@ -1,0 +1,16 @@
+name: preference
+version: v1
+# WS-4 — Preference evaluation. Loads (prompt, chosen, rejected, reference)
+# triples from data/benchmarks/preference/v1/preference.jsonl and scores them
+# with a rule-based judge (lexical overlap with the gold reference). A real
+# RM-guided win-rate replaces this baseline before release; the suite
+# structure is identical.
+data_dir: ../../data/benchmarks/preference/v1
+tasks:
+  - preference
+metrics:
+  - win
+  - tie
+  - lose
+  - chosen_score
+  - rejected_score

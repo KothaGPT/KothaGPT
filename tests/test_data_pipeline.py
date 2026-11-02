@@ -5,8 +5,8 @@ from __future__ import annotations
 import gzip
 import json
 
-from data.pipeline import dedup, io, normalize, quality, split
-from data.pipeline.config import PipelineConfig, run_pipeline
+from data.pipeline import cli, dedup, io, normalize, quality, split
+from data.pipeline.config import PipelineConfig, enforce_source_provenance, run_pipeline
 
 
 def _read_shard_text(path) -> str:
@@ -95,6 +95,7 @@ def test_full_pipeline_pii_mask_mode_keeps_doc(tmp_path):
         min_words=1,
         require_bangla=False,
         pii_mode="mask",
+        strict=False,  # dev bypass: no registry configured in this test
     )
     summary = run_pipeline(cfg)
     assert summary["raw"] == 2
@@ -163,6 +164,79 @@ def test_split_is_deterministic_and_balanced():
     assert 0.05 < val / len(sets) < 0.2
 
 
+def test_stratified_test_split_ratios_and_reproducibility():
+    records = [
+        {"text": f"{source} document {i}", "source": source}
+        for source in ("common", "rare")
+        for i in range(1000)
+    ]
+    records += [
+        {"text": f"domain document {i}", "url": "https://example.org/page"}
+        for i in range(1000)
+    ]
+
+    result = split.split_records(records, validation_ratio=0.1, test_ratio=0.05)
+    reversed_result = split.split_records(
+        list(reversed(records)), validation_ratio=0.1, test_ratio=0.05
+    )
+    assignments = {record["text"]: record["split"] for record in result}
+    assert assignments == {record["text"]: record["split"] for record in reversed_result}
+    assert sum(record["split"] == "validation" for record in result) == 300
+    assert sum(record["split"] == "test" for record in result) == 150
+    for source in ("common", "rare"):
+        source_splits = {r["split"] for r in result if r.get("source") == source}
+        assert source_splits == {"train", "validation", "test"}
+    domain_splits = {
+        r["split"] for r in result if r.get("url") == "https://example.org/page"
+    }
+    assert domain_splits == {"train", "validation", "test"}
+
+
+def test_split_keeps_exact_duplicates_together_and_checks_contamination():
+    records = [
+        {"text": "duplicate text", "source": "a"},
+        {"text": "duplicate text", "source": "b"},
+        {"text": "different text", "source": "a"},
+    ]
+    assigned = split.split_records(records, validation_ratio=0.2, test_ratio=0.2)
+    assert assigned[0]["split"] == assigned[1]["split"]
+    split.assert_no_split_contamination(assigned)
+
+    contaminated = [
+        {"text": "same text", "split": "train"},
+        {"text": "same text", "split": "test"},
+    ]
+    try:
+        split.assert_no_split_contamination(contaminated)
+    except ValueError as exc:
+        assert "cross-split exact-text contamination" in str(exc)
+    else:
+        raise AssertionError("cross-split duplicates must be rejected")
+
+
+def test_split_records_rejects_invalid_ratios():
+    import pytest
+
+    with pytest.raises(ValueError, match="test_ratio"):
+        split.split_records([], test_ratio=1.0)
+    with pytest.raises(ValueError, match="must be less than 1"):
+        split.split_records([], validation_ratio=0.6, test_ratio=0.4)
+
+
+def test_test_split_can_be_enabled_without_validation_split():
+    records = [
+        {"text": "first document", "source": "a"},
+        {"text": "second document", "source": "a"},
+    ]
+    result = split.split_records(records, validation_ratio=0, test_ratio=0.01)
+    assert {record["split"] for record in result} == {"train", "test"}
+
+
+def test_cli_accepts_test_ratio():
+    args = cli._build_parser().parse_args(["run", "--test-ratio", "0.05"])
+    assert args.test_ratio == 0.05
+
+
 def test_ensure_nonempty_validation_promotes_closest_record():
     records = [split.split_record({"text": f"doc {i}"}) for i in range(12)]
     if any(r["split"] == "validation" for r in records):
@@ -222,6 +296,7 @@ def test_full_pipeline(tmp_path):
         "বাংলা ভাষা বাংলাদেশের মানুষের মাতৃভাষা। এটি একটি প্রাচীন এবং সমৃদ্ধ ভাষা।" * 10,
         "বাংলা ভাষা বাংলাদেশের মানুষের মাতৃভাষা। এটি একটি প্রাচীন এবং সমৃদ্ধ ভাষা।" * 10,
         "<p>বাংলা ভাষা হচ্ছে পূর্ব ভারতীয় আর্য ভাষা পরিবারের সদস্য।</p>" * 15,
+        "বাংলাদেশের নদীগুলো কৃষি, পরিবহন এবং জীববৈচিত্র্যের জন্য গুরুত্বপূর্ণ।" * 12,
         "This is an English text that should be filtered out by the language check." * 20,
     ]
     for i, text in enumerate(docs):
@@ -238,14 +313,17 @@ def test_full_pipeline(tmp_path):
         min_bangla_ratio=0.5,
         dedup_exact=True,
         validation_ratio=0.1,
+        test_ratio=0.2,
         shard_size=100,
+        strict=False,  # dev bypass: no registry configured in this test
     )
     summary = run_pipeline(cfg)
 
-    assert summary["raw"] == 4
-    assert summary["after_filter"] == 3  # English doc dropped
-    assert summary["after_dedup"] == 2  # duplicate removed
-    assert summary["train"] + summary["validation"] == 2
+    assert summary["raw"] == 5
+    assert summary["after_filter"] == 4  # English doc dropped
+    assert summary["after_dedup"] == 3  # duplicate removed
+    assert summary["train"] + summary["validation"] + summary["test"] == 3
+    assert summary["train"] and summary["validation"] and summary["test"]
     assert summary["version_id"]
 
     manifest = out_root / summary["version_id"] / "MANIFEST.json"
@@ -253,3 +331,63 @@ def test_full_pipeline(tmp_path):
     data = json.loads(manifest.read_text(encoding="utf-8"))
     assert data["version_id"] == summary["version_id"]
     assert (out_root / summary["version_id"] / "report" / "REPORT.md").exists()
+    assert (out_root / summary["version_id"] / "test").is_dir()
+
+
+def _registry_with(source_name: str = "wiki", license_id: str = "cc-by-sa-4.0"):
+    from data.manifest import DatasetRegistry, DatasetSource
+
+    reg = DatasetRegistry()
+    reg.register(
+        DatasetSource(
+            name=source_name,
+            url=f"https://example.com/{source_name}",
+            license=license_id,
+            provenance="test",
+        )
+    )
+    return reg
+
+
+def _records() -> list[dict]:
+    return [
+        {"id": "1", "text": "বাংলা ভাষা।", "source": "wiki"},
+        {"id": "2", "text": "more bangla text।", "source": "wiki"},
+        {"id": "3", "text": "unregistered source text।", "source": "unregistered"},
+        {"id": "4", "text": "no source field here।"},
+    ]
+
+
+def test_enforce_source_provenance_strict_empty_registry_rejects_all():
+    kept, rejected = enforce_source_provenance(_records(), strict=True)
+    assert kept == []
+    assert len(rejected) == 4
+    assert all("no sources registered" in r for r in rejected)
+
+
+def test_enforce_source_provenance_strict_unregistered_source_rejected():
+    reg = _registry_with()
+    kept, rejected = enforce_source_provenance(_records(), registry=reg, strict=True)
+    kept_ids = {r["id"] for r in kept}
+    assert kept_ids == {"1", "2"}
+    assert any("unregistered" in r for r in rejected)
+    assert any("missing 'source' field" in r for r in rejected)
+
+
+def test_enforce_source_provenance_strict_disallowed_license_rejected():
+    reg = _registry_with(license_id="all-rights-reserved")
+    kept, rejected = enforce_source_provenance(_records()[:2], registry=reg, strict=True)
+    assert kept == []
+    assert all("not in the allowlist" in r for r in rejected)
+
+
+def test_enforce_source_provenance_dev_bypass_allows_all():
+    kept, rejected = enforce_source_provenance(_records(), strict=False)
+    assert kept == _records()
+    assert rejected == []
+
+
+def test_enforce_source_provenance_dev_bypass_empty_registry_allows_all():
+    kept, rejected = enforce_source_provenance(_records(), registry=_registry_with(), strict=False)
+    assert kept == _records()
+    assert rejected == []

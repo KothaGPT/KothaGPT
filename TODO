@@ -102,7 +102,9 @@ Practical next steps (II–III done, IV in progress)
 - I. Update this `TODO` with the prioritized roadmap and checklists (done).
 - II. Create `data/processed/README.md`, `ml/tokenizer/README.md`, and `services/api/quickstart.md` stubs (done).
 - III. Add small `Makefile` targets for validation and quickserve (done).
-- IV. SFT/Preference/RAG/Runtime foundation (WS-2/3) — DONE: `ml/sft` templates/dataset/trainer, `ml/preference` DPO, `services/rag` ingest/store, `ml/inference` registry/engine; `make sft-smoke`, `make sft-train variant=bn`, `make preference-smoke`, `make rag-*-smoke` all green. Next: WS-4/5/6/11 SFT eval per-family suites + preference safety/hallucination eval, then scale & eval (long-context, multi-GPU) per `docs/pretraining-plan.md`.
+- IV. SFT/Preference/RAG/Runtime foundation (WS-2/3) — training and local checkpoint evaluation are wired: `make sft-real` requires explicit training data and a base checkpoint, then runs the per-family non-regression gate. `make eval-sft-ci` remains a fixture harness smoke test, not a release-quality evaluation. Real training is still blocked here because no pretrained checkpoint or curated instruction corpus is available; the checked-in four-record SFT families are smoke fixtures only. Next: WS-4 preference evaluation; WS-5 semantic consistency and broader probes; WS-6 safety/refusal suites; then scale & eval (long-context, multi-GPU) per `docs/pretraining-plan.md`.
+
+- V. WS-4..WS-9 alignment eval suites — DONE: `evals/metrics.py` and `evals/run.py` provide preference, hallucination, safety, helpfulness, Bangla-quality, and refusal metrics/controls; all six suites are included in `make eval-alignment`. WS-7/WS-8 deterministic proxy metrics and suites are covered by `tests/test_alignment_quality_suites.py`; preference data and tests remain in `data/benchmarks/preference/v1/` and `tests/test_preference_suites.py`. Remaining: real-model baselines, linguistic review for Bangla grammar/register/transliteration, RM-guided win-rate replacing the rule-based judge, then scale & eval (long-context, multi-GPU) per `docs/pretraining-plan.md`.
 
 Implementation plans (all linked from `docs/roadmap.md`)
 
@@ -148,6 +150,17 @@ confirmed via `docs/foundation-plan.md`).
    - [x] Scale training — long-context 16k RoPE linear (`ml/configs/long.yaml`, `ml/pretrain/scale.py`, `make scale-smoke` 2 steps 10.75→9.68) and model-based quality evaluation (`evals/sft_vs_base.py`, `make eval-sft-vs-base` base 0.714 vs sft 0.714 Δ0.0 on fixtures)`
 
 - Phase 5 — Runtime: `docs/runtime-plan.md` (engine, KV cache, batching, quantization, registry, API, auth, rate limiting).
+
+Production Model Family — WS-1/WS-3/WS-5 scaffolding complete (commit c2ad2bb+)
+
+- [x] WS-1 tier configs + registry + `make config-validate` — all four tier configs load and validate; `ModelTier` resolves config path to digest; registry lists all four tiers with accurate metadata.
+- [x] WS-2 MoE research track — `ml/models/moe/train.py` (`MoETrainer` with separate LR for MoE params + auxiliary loss) + `make moe-smoke`; `ml/inference/moe_engine.py` (`MoEEngine` with `build_routing_table`, `expert_parallel_batch`, hidden-state `generate`) + `ml/inference/expert_parallel.py` (`ExpertParallelBatcher`); `ml/models/moe/decision.md` records the architecture decision; tests `tests/test_moe_train.py`, `tests/test_moe_engine.py`.
+- [x] WS-3 reasoning/coding specialist SFT — `ml/sft/reasoning.py` and `ml/sft/coding.py` dataset loaders with family annotation; `ml/tokenizer/coding.py` additive coding special-token extensions; `evals/suites/reasoning.yaml`, `evals/suites/coding.yaml`, `evals/suites/multimodal.yaml`; `make eval-reasoning`, `make eval-coding`, `make eval-routing`, `make eval-regress`, `make eval-all` wired.
+- [x] WS-4 multimodal pipelines — `ml/sft/mm_dataset.py` (`MultimodalDataset` + `load_mm_records`, groups by image/audio/document/text); `evals/suites/multimodal.yaml`; tests `tests/test_mm_dataset.py`.
+- [x] WS-5 model routing wired into the API — `ml/inference/router_config.yaml` (task-class → tier, escalation chain, tier quality, latency SLA); `ModelRouter` loads the YAML and escalates on quality-floor miss; `services/api/router.py` + `services/api/api/routers/chat.py` expose the `X-Kotha-Tier` header (`auto`/`nano`/`small`/`medium`/`large`); routing decision is returned in the `X-Kotha-Routing` response header.
+- [x] WS-1/WS-2/WS-3/WS-4/WS-5 tests — `tests/test_model_tier.py`, `tests/test_tier_configs.py`, `tests/test_reasoning_head.py`, `tests/test_coding_tokens.py`, `tests/test_model_router.py`, `tests/test_moe_train.py`, `tests/test_moe_engine.py`, `tests/test_mm_dataset.py`; `make plans-check` clean.
+
+Remaining: real per-tier model artifacts and all-tier model validation; MoE quality/compute comparisons at a fixed parameter budget (Phase A); static routing table + expert parallelism production integration (Phase C); frontier MoE config + trained checkpoint (Phase D); execution-based pass@k and syntax-validity scoring for the coding eval; tier-specific SFT; production multimodal backbones/integration.
 - Phase 6 — Intelligence: `docs/rag-plan.md` (ingestion, retrieval, citations), `docs/agent-plan.md` (tools, memory, planner, loop, sandbox, permissions).
 - Phase 6b — Context Engineering: `docs/context-engineering-plan.md` (prompts, hierarchy, window, packing, compression, selective context, safe formatting, registry).
 - Phase 7 — Platform: `docs/web-app-plan.md` (apps/web dashboard), `docs/sdk-plan.md` + `docs/sdk.md` (multi-language SDKs).

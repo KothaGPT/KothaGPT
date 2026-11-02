@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
 
 class AuditLog:
     def __init__(self):
@@ -14,7 +15,7 @@ class AuditLog:
 
     def log(self, actor: str, action: str, resource: str, decision: str, tenant: str = "default", trace_id: str = "") -> dict[str, Any]:
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "actor": actor,
             "action": action,
             "resource": resource,

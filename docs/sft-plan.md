@@ -29,14 +29,14 @@ Guiding principles:
 
 | Area | Exists | Gaps |
 | --- | --- | --- |
-| Base model | `ml/models/` full KothaGPT (embedding, attention, blocks, SwiGLU, RoPE, RMSNorm, output head) | pre-trained checkpoint not yet released (pretraining WS-12 pending) |
-| Trainer core | `ml/trainer/` loop, checkpoint (atomic/resume), scheduler, monitor, DDP/FSDP, mixed precision | only causal-LM loss path; no chat-template / instruction masking |
-| SFT package | `ml/sft/` exists but is empty | whole workstream missing |
-| Preference tuning | `ml/preference/` exists but is empty | out of scope (follow-up plan) |
-| Data pipeline | `data/pipeline/` normalize → quality → spam → toxic → PII → copyright → dedup → split → version; `data/synthetic/` + instruction shards (`data/processed/<ver>/instruction/`) planned in `docs/dataset-pipeline-plan.md` (A8) | no instruction shards produced yet; no role/content schema module |
-| Eval | `evals/run.py` + `evals/suites/bangla.yaml` (QA/translation/summarization/generation) + `evals/results/` reports | no SFT/chat eval, no instruction-following metrics, no base-vs-SFT comparisons |
+| Base model | `ml/models/` full KothaGPT (embedding, attention, blocks, SwiGLU, RoPE, RMSNorm, output head) | no pretrained checkpoint is present in this checkout (pretraining WS-12 pending) |
+| Trainer core | `ml/trainer/` loop, checkpoint (atomic/resume), scheduler, monitor, DDP/FSDP, mixed precision | domain-specific dataset and run configuration remain the responsibility of each training entry point |
+| SFT package | `ml/sft/` templates, assistant-masked dataset, shared resumable trainer, and CLI; CLI writes inference-loadable checkpoints and provenance metadata | Larger curated instruction corpora and release artifacts remain to be supplied |
+| Preference tuning | `ml/preference/` DPO dataset and trainer | out of scope (follow-up plan) |
+| Data pipeline | `data/pipeline/` prose and instruction paths with normalization, provenance/license, safety, deduplication, scoring, splitting, and versioned shards | no production instruction corpus is checked in; supply curated/reviewed source JSONL |
+| Eval | SFT family suites, checkpoint-backed `model` target, and base-vs-SFT non-regression command (`make sft-gate`) | checked-in SFT v1 data is a tiny pipeline fixture, not a release benchmark; no real checkpoint/data is present |
 | Tokenizer | frozen 16k BPE (`ml/tokenizer/artifacts/best/`, GPT-2-style `▁`) | no chat special tokens (e.g. `<&#124;im_start&#124;>`) verified in vocab |
-| Configs | `ml/configs/small.yaml` (model/training/data) | no SFT configs (sft.yaml, dataset mix, template) |
+| Configs | `ml/configs/sft*.yaml` and `ml/configs/small.yaml` | production data/model artifacts must be supplied by the run owner |
 
 ---
 
@@ -47,21 +47,26 @@ Guiding principles:
 Goal: a versioned, quality-gated, Bangla-first instruction corpus that feeds
 every downstream WS.
 
-- Implement the dataset-pipeline A8/A9 plan: Alpaca-style curated Bangla
-  instructions + synthetic generation pipeline (`data/synthetic/`) with
-  answer-extraction verification.
+- Curate JSONL records as either `{instruction, input?, output, source,
+  license}` or `{messages: [{role, content}], source, license}`. The
+  `kothagpt-data instruction run` pipeline canonicalizes both forms and applies
+  provenance, license, PII, spam, toxic-content, exact/optional near-dedup,
+  and deterministic split gates before emitting shards. Synthetic records must
+  be reviewed and use the same schema/gates; no model is invoked by the
+  pipeline.
 - Add `data/pipeline/schema.py` validating
   `{messages: [{role: system|user|assistant, content}], source, license,
   quality_score}`; reject malformed or empty-answer records.
-- Run through the existing Phase-B gates (spam/toxic/PII/copyright) and the B6
-  quality scorer (`--min-score`) before a release; land shards at
-  `data/processed/<ver>/instruction/` in train/validation/test splits.
+- Run through the Phase-B gates and the deterministic, model-free quality
+  scorer (`--min-score`) before a release; land shards at
+  `data/processed/<ver>/instruction/{train,validation,test}/`.
 - Emit per-task-type tags (`general`, `reasoning`, `coding`, `conversation`,
   `function_call`, `tool_use`) so WS-3..WS-10 can mix selectively.
 - Deliverables: `data/synthetic/` generators, `schema.py`, instruction shards +
   `MANIFEST.json` with quality histogram.
 - Metric: instruction shard passes all gates with zero PII/license failures;
-  ≥ 95% records non-empty; ≥ threshold quality score; reproducible from config.
+  all answers non-empty; ≥ threshold quality score; score histogram and
+  percentiles are recorded; reproducible from config.
 
 ### WS-2 — SFT pipeline তৈরি (`ml/sft/`)
 
@@ -194,19 +199,34 @@ Goal: teach the model to call tools and integrate results into the answer.
 
 Goal: a release gate that measures what tuning bought, per task family.
 
-- Extend `evals/run.py` with an **SFT/chat mode**: instruct-formatted prompts,
-  chat template, assistant-mask-aware scoring, plus a suite of IF metrics
-  (format compliance, answerability, verbosity control, refusal rate, function
-  call/tool result accuracy reusing WS-9/WS-10 verifiers).
-- Add per-family suites in `evals/suites/` (sft-bn, sft-en, sft-multilingual,
-  sft-code, sft-reasoning, sft-conversation, sft-fc) and a base-vs-SFT
-  comparison table in the report.
-- Wire `make eval-sft` + a CI gate; record baselines (base model, random init)
-  so gains are attributable to SFT.
-- Deliverables: `evals/suites/sft*.yaml`, SFT metrics in `evals/metrics.py`,
-  dated reports in `evals/results/`.
-- Metric: every SFT release has a per-family report; scores meet documented
-  thresholds and are non-worse than base on pre-training benchmarks.
+Implemented: `evals/run.py --target model` loads local KothaGPT checkpoints and
+uses training-compatible chat prompts. `make sft-real` requires an explicit
+training JSONL and pretrained checkpoint, writes the tuned artifact, then runs
+`make sft-gate` against the base on each SFT family. The gate rejects
+regressions in exact/normalized matching and function/tool-call equality.
+`make eval-sft-ci` remains a fixture-based harness smoke test; it is not the
+real-model release gate.
+
+The checked-in SFT benchmark has only four records per family (three dev, one
+test), so gate results are wiring checks and must not be used to claim
+statistical release quality. A production release requires a larger,
+independently curated held-out benchmark and actual pretrained/training
+artifacts, neither of which is checked into this repository.
+
+Example real run (use a checkpoint from the pretraining artifact directory and
+an independently curated instruction JSONL):
+
+```bash
+make sft-real variant=bn \
+  train_data=/path/to/instruction-train.jsonl \
+  base=ml/pretrain/artifacts/<run-id>/checkpoints/best.pt \
+  eval_data=/path/to/held-out-sft-benchmarks \
+  device=cuda
+```
+
+`eval_data` must contain the family JSONL files used by the SFT suites and is
+required by `make sft-real`. A direct `make sft-gate` without `eval_data` uses
+the checked-in fixture benchmark and prints its small-sample warning.
 
 ---
 
@@ -251,10 +271,10 @@ a parallel, always-running gate and the summit.
 ```bash
 make data && python -m pytest tests/test_instruction_schema.py   # WS-1
 make sft-smoke && python -m pytest tests/test_sft.py              # WS-2
-make sft-train variant=bn && make eval-sft suite=sft-bn          # WS-3/11
-make sft-train variant=en && make eval-sft suite=sft-en          # WS-4
-make sft-train variant=multilingual && make eval-sft suite=sft-multilingual  # WS-5
-make sft-train variant=code && make eval-sft suite=sft-code      # WS-6
+make sft-real variant=bn train_data=/path/to/train.jsonl base=/path/to/base.pt  # WS-3/11
+make sft-real variant=en train_data=/path/to/train.jsonl base=/path/to/base.pt  # WS-4
+make sft-real variant=multilingual train_data=/path/to/train.jsonl base=/path/to/base.pt  # WS-5
+make sft-real variant=code train_data=/path/to/train.jsonl base=/path/to/base.pt  # WS-6
 python -m pytest tests/test_reasoning_verifier.py                 # WS-7
 python -m pytest tests/test_conversation_schema.py                # WS-8
 python -m pytest tests/test_function_call.py                      # WS-9

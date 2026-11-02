@@ -1,5 +1,6 @@
 from ml.inference.version import VersionManager
 
+
 def test_version_flow():
     vm = VersionManager()
     v1 = vm.register_version("kothagpt", "ml/pretrain/artifacts/v1")

@@ -21,7 +21,16 @@ def _api_token(monkeypatch: pytest.MonkeyPatch):
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json()["status"] == "ok"
+    body = r.json()
+    # KGPT-002: status reflects the active runtime contract. A mock/example
+    # backend is reported as "degraded" so callers cannot mistake it for a
+    # production model runtime; the runtime snapshot is always present.
+    assert body["status"] in ("ok", "degraded")
+    assert body["service"] == "kothagpt-api"
+    assert "runtime" in body
+    runtime = body["runtime"]
+    assert runtime["backend"] == "mock"
+    assert runtime["production"] is False
 
 
 def test_list_models():

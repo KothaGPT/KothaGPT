@@ -1,0 +1,564 @@
+{
+  "suite": "bangla-robustness",
+  "target": "mock",
+  "split": "all",
+  "date": "2026-11-01",
+  "summary": {
+    "bangla_robustness": {
+      "instances": 24,
+      "metrics": {
+        "bengali_script_ratio": {
+          "mean": 0.9568479938271605,
+          "std": 0.10858053082709324,
+          "ci_low": 0.9134067340610973,
+          "ci_high": 1.0002892535932237
+        },
+        "language_correct": {
+          "mean": 1.0,
+          "std": 0.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "rouge1": {
+          "mean": 1.0,
+          "std": 0.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        },
+        "rouge2": {
+          "mean": 0.9583333333333334,
+          "std": 0.2041241452319315,
+          "ci_low": 0.8766666666666667,
+          "ci_high": 1.04
+        },
+        "rougeL": {
+          "mean": 1.0,
+          "std": 0.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0
+        }
+      }
+    }
+  },
+  "families": {
+    "bangla_robustness": {
+      "code_switched": {
+        "instances": 5,
+        "metrics": {
+          "bengali_script_ratio": {
+            "mean": 0.9125,
+            "std": 0.1956559480312316,
+            "ci_low": 0.741,
+            "ci_high": 1.084
+          },
+          "language_correct": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rouge1": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rouge2": {
+            "mean": 0.8,
+            "std": 0.4472135954999579,
+            "ci_low": 0.4080000000000001,
+            "ci_high": 1.192
+          },
+          "rougeL": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          }
+        }
+      },
+      "colloquial": {
+        "instances": 5,
+        "metrics": {
+          "bengali_script_ratio": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "language_correct": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rouge1": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rouge2": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rougeL": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          }
+        }
+      },
+      "formal": {
+        "instances": 4,
+        "metrics": {
+          "bengali_script_ratio": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "language_correct": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rouge1": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rouge2": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rougeL": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          }
+        }
+      },
+      "noisy_mixed": {
+        "instances": 5,
+        "metrics": {
+          "bengali_script_ratio": {
+            "mean": 0.8803703703703704,
+            "std": 0.11499090439368873,
+            "ci_low": 0.7795763985951312,
+            "ci_high": 0.9811643421456095
+          },
+          "language_correct": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rouge1": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rouge2": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rougeL": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          }
+        }
+      },
+      "transliterated": {
+        "instances": 5,
+        "metrics": {
+          "bengali_script_ratio": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "language_correct": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rouge1": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rouge2": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          },
+          "rougeL": {
+            "mean": 1.0,
+            "std": 0.0,
+            "ci_low": 1.0,
+            "ci_high": 1.0
+          }
+        }
+      }
+    }
+  },
+  "tasks": {
+    "bangla_robustness": [
+      {
+        "record_id": "robustness:000",
+        "split": "dev",
+        "family": "formal",
+        "prediction": "সকাল সাতটায়।",
+        "reference": "সকাল সাতটায়।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:001",
+        "split": "dev",
+        "family": "formal",
+        "prediction": "তিন কেজি চাল এবং এক লিটার তেল।",
+        "reference": "তিন কেজি চাল এবং এক লিটার তেল।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:002",
+        "split": "test",
+        "family": "formal",
+        "prediction": "দুপুর দুইটায়।",
+        "reference": "দুপুর দুইটায়।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:003",
+        "split": "dev",
+        "family": "formal",
+        "prediction": "একটি ছাতা।",
+        "reference": "একটি ছাতা।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:004",
+        "split": "test",
+        "family": "colloquial",
+        "prediction": "দুই কেজি চাল।",
+        "reference": "দুই কেজি চাল।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:005",
+        "split": "dev",
+        "family": "colloquial",
+        "prediction": "ছাতা নেওয়া হবে।",
+        "reference": "ছাতা নেওয়া হবে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:006",
+        "split": "dev",
+        "family": "colloquial",
+        "prediction": "কালকে বিকেলে।",
+        "reference": "কালকে বিকেলে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:007",
+        "split": "dev",
+        "family": "colloquial",
+        "prediction": "নানুর বাসায়।",
+        "reference": "নানুর বাসায়।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:008",
+        "split": "dev",
+        "family": "colloquial",
+        "prediction": "একটি চার্জার।",
+        "reference": "একটি চার্জার।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:009",
+        "split": "dev",
+        "family": "code_switched",
+        "prediction": "আজ ৫টায়।",
+        "reference": "আজ ৫টায়।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:010",
+        "split": "dev",
+        "family": "code_switched",
+        "prediction": "ফাইলটি।",
+        "reference": "ফাইলটি।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 0.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:011",
+        "split": "dev",
+        "family": "code_switched",
+        "prediction": "অনলাইনে হবে।",
+        "reference": "অনলাইনে হবে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:012",
+        "split": "dev",
+        "family": "code_switched",
+        "prediction": "বাসে traffic বেশি।",
+        "reference": "বাসে traffic বেশি।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 0.5625,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:013",
+        "split": "dev",
+        "family": "code_switched",
+        "prediction": "আজ রাতেই।",
+        "reference": "আজ রাতেই।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:014",
+        "split": "dev",
+        "family": "transliterated",
+        "prediction": "স্কুল থেকে বই আনা হবে।",
+        "reference": "স্কুল থেকে বই আনা হবে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:015",
+        "split": "dev",
+        "family": "transliterated",
+        "prediction": "ট্রেন কাল সকাল ৮টায় ছাড়বে।",
+        "reference": "ট্রেন কাল সকাল ৮টায় ছাড়বে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:016",
+        "split": "dev",
+        "family": "transliterated",
+        "prediction": "আমার বোন বাজার থেকে আম কিনেছে।",
+        "reference": "আমার বোন বাজার থেকে আম কিনেছে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:017",
+        "split": "dev",
+        "family": "transliterated",
+        "prediction": "বৃষ্টি হলে আমরা বাড়িতে থাকব।",
+        "reference": "বৃষ্টি হলে আমরা বাড়িতে থাকব।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:018",
+        "split": "dev",
+        "family": "transliterated",
+        "prediction": "দুপুরে ভাত খাওয়া হয়েছে।",
+        "reference": "দুপুরে ভাত খাওয়া হয়েছে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:019",
+        "split": "test",
+        "family": "noisy_mixed",
+        "prediction": "বাসটি ৮টা ৩০ মিনিটে আসবে।",
+        "reference": "বাসটি ৮টা ৩০ মিনিটে আসবে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:020",
+        "split": "dev",
+        "family": "noisy_mixed",
+        "prediction": "আজ file-টি ইমেইল করতে বলা হয়েছে।",
+        "reference": "আজ file-টি ইমেইল করতে বলা হয়েছে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 0.8518518518518519,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:021",
+        "split": "test",
+        "family": "noisy_mixed",
+        "prediction": "আজ বৃষ্টির সম্ভাবনা আছে কি না জানতে চাওয়া হয়েছে।",
+        "reference": "আজ বৃষ্টির সম্ভাবনা আছে কি না জানতে চাওয়া হয়েছে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 1.0,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:022",
+        "split": "dev",
+        "family": "noisy_mixed",
+        "prediction": "কালকের class সকাল ১০টায় হবে।",
+        "reference": "কালকের class সকাল ১০টায় হবে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 0.8,
+          "language_correct": 1.0
+        }
+      },
+      {
+        "record_id": "robustness:023",
+        "split": "dev",
+        "family": "noisy_mixed",
+        "prediction": "বাসে করে office-এ যাওয়া হবে।",
+        "reference": "বাসে করে office-এ যাওয়া হবে।",
+        "scores": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0,
+          "bengali_script_ratio": 0.75,
+          "language_correct": 1.0
+        }
+      }
+    ]
+  },
+  "cases": [],
+  "cases_by_category": {}
+}

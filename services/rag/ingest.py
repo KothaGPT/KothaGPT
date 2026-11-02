@@ -8,18 +8,16 @@ record in memory (Postgres when DATABASE_URL present).
 from __future__ import annotations
 
 import hashlib
-import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
 
-from .chunk import Chunk, chunk_text
+from .chunk import chunk_text
 from .retriever import LexicalRetriever
 
 try:
     from data.pipeline.normalize import normalize_text as _normalize  # reuse Phase-B
-except Exception:  # fallback if pipeline not importable in minimal env
+except Exception:  # noqa: BLE001 — fallback if pipeline not importable in minimal env
     def _normalize(text: str) -> str:  # type: ignore
         return text
 
@@ -31,7 +29,7 @@ class DocumentRecord:
     digest: str
     status: str = "ready"
     license: str | None = None
-    fetched_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    fetched_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     chunk_ids: list[str] = field(default_factory=list)
 
 
@@ -61,7 +59,7 @@ class IngestPipeline:
             self._docs[doc_id] = rec
             self._by_digest[digest] = doc_id
             return rec
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — record failure and continue
             rec = DocumentRecord(document_id=doc_id, source=source, digest=digest, status=f"failed: {e}", license=license)
             self._docs[doc_id] = rec
             return rec

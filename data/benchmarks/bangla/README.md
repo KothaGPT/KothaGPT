@@ -28,12 +28,24 @@ JSONL matches the generator output exactly.
 - Translation: `source_text` + `reference` + `source_lang` / `target_lang`.
 - Summarization: `prompt` + `source` + `reference` (hand-authored gold).
 - Generation: `prompt` + `reference` (open-ended; scored for language quality).
+- Robustness: `data/benchmarks/bangla/robustness.py` builds
+  `bangla_robustness.jsonl`, covering formal and colloquial Bangla,
+  Bangla-English code-switching, Latin-script Bangla, and noisy mixed-script
+  inputs. Records carry `dialect`, `region`, `script_pattern`, `phenomena`,
+  `domain`, `family`, and stable `dev`/`test` splits. Noisy script patterns
+  retain their underlying Bengali, Latin, or mixed-script classification.
+  These curated seed cases are deterministic evaluation fixtures and should
+  receive native-speaker review before being treated as a representative
+  regional-dialect benchmark.
 
 ## Regenerate
 
 ```bash
 python -m data.benchmarks.bangla.generate
+python -m data.benchmarks.bangla.robustness
 ```
 
-This rewrites `v1/*.jsonl` and `MANIFEST.json`. Do not hand-edit the JSONL —
-edit the generator and regenerate.
+The core generator rewrites all v1 task files and the complete manifest. The
+robustness generator can also write only `bangla_robustness.jsonl` and update
+its manifest entry. Do not hand-edit the JSONL — edit the relevant generator
+and regenerate.
