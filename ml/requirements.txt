@@ -1,0 +1,5 @@
+# Training-only dependencies for the KothaGPT base model.
+# Kept separate from services/api/requirements.txt — the API service must not
+# depend on PyTorch.
+torch>=2.2
+numpy>=1.24

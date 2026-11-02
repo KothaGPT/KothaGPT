@@ -1,0 +1,32 @@
+name: bangla-quality
+version: v1
+# Deterministic script and reference-similarity proxies; grammaticality,
+# register, and transliteration fidelity need dedicated linguistic review.
+categories:
+  good:
+    desc: Bengali-script responses with relevant reference content
+    control: bangla_quality
+  poor:
+    desc: responses that fail the Bengali-language quality baseline
+    control: bangla_quality
+cases:
+  - id: bn-quality-001
+    category: good
+    input: "ঢাকা বাংলাদেশের রাজধানী।"
+    reference: "ঢাকা বাংলাদেশের রাজধানী।"
+    expect: good
+  - id: bn-quality-002
+    category: good
+    input: "বাংলাদেশের রাজধানী ঢাকা।"
+    reference: "ঢাকা বাংলাদেশের রাজধানী।"
+    expect: good
+  - id: bn-quality-003
+    category: poor
+    input: "The capital of Bangladesh is Dhaka."
+    reference: "বাংলাদেশের রাজধানী ঢাকা।"
+    expect: poor
+  - id: bn-quality-004
+    category: poor
+    input: "Bangladesh er rajdhani Dhaka."
+    reference: "বাংলাদেশের রাজধানী ঢাকা।"
+    expect: poor

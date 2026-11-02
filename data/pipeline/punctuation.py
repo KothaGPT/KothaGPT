@@ -29,8 +29,16 @@ _DANDA_SPACE_RE = re.compile(r"\s+\u0964")
 _DANDA_JOIN_RE = re.compile(r"\u0964(?=[^\s\u0964])")
 
 _CURLY_QUOTE_TABLE = str.maketrans(
-    {"\u201c": '"', "\u201d": '"', "\u201e": '"', "\u00ab": '"', "\u00bb": '"',
-     "\u2018": "'", "\u2019": "'", "\u201a": "'"}
+    {
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u201e": '"',
+        "\u00ab": '"',
+        "\u00bb": '"',
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201a": "'",
+    }
 )
 _DASH_TABLE = str.maketrans({"\u2013": "-", "\u2014": "-"})
 _ELLIPSIS_RE = re.compile("\u2026")

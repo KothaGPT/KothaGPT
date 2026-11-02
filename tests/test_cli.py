@@ -15,8 +15,10 @@ def run_cli(*args, env=None):
 
 
 @pytest.fixture(scope="module")
-def env():
-    return {"KOTHAGPT_API_URL": "http://localhost:8000"}
+def env(server):
+    from tests.conftest import API_TEST_TOKEN
+
+    return {"KOTHAGPT_API_URL": server, "KOTHAGPT_API_KEY": API_TEST_TOKEN}
 
 
 def test_models(env):

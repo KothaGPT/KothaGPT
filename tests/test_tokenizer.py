@@ -1,4 +1,4 @@
-"""Tests for the Phase 1B Bangla tokenizer (BPE and Unigram)."""
+"""Tests for the Phase 1B Bangla tokenizer (BPE, Unigram, and WordPiece)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,14 @@ from ml.tokenizer import (
     load_tokenizer,
     train_bpe,
     train_unigram,
+    train_wordpiece,
 )
-from ml.tokenizer.benchmark import SAMPLE_TEXTS, run_benchmark
+from ml.tokenizer.benchmark import (
+    GATED_SETS,
+    SAMPLE_TEXTS,
+    check_benchmark,
+    run_benchmark,
+)
 from ml.tokenizer.corpus import load_corpus
 
 _BANGLA_WORDS = [
@@ -168,6 +174,18 @@ def test_unigram_trains_and_roundtrips(corpus):
         assert tokenizer.decode(tokenizer.encode(text)) == text
 
 
+def test_wordpiece_trains_vocab(corpus):
+    tokenizer = train_wordpiece(corpus, vocab_size=400, min_frequency=2)
+    assert len(tokenizer.vocab) >= 300
+    assert tokenizer.merges
+
+
+def test_wordpiece_roundtrip(corpus):
+    tokenizer = train_wordpiece(corpus, vocab_size=400, min_frequency=2)
+    for text in corpus[:20]:
+        assert tokenizer.decode(tokenizer.encode(text)) == text
+
+
 def test_vocab_contains_special_tokens(corpus):
     tokenizer = train_bpe(corpus, vocab_size=200, min_frequency=2)
     for special in ("<unk>", "<bos>", "<eos>", "<pad>"):
@@ -177,7 +195,8 @@ def test_vocab_contains_special_tokens(corpus):
 def test_save_load_roundtrip(corpus, tmp_path):
     bpe = train_bpe(corpus, vocab_size=300, min_frequency=2)
     unigram = train_unigram(corpus, vocab_size=300, min_frequency=2, iterations=2)
-    for tokenizer, name in ((bpe, "bpe"), (unigram, "unigram")):
+    wordpiece = train_wordpiece(corpus, vocab_size=300, min_frequency=2)
+    for tokenizer, name in ((bpe, "bpe"), (unigram, "unigram"), (wordpiece, "wordpiece")):
         tokenizer.save(tmp_path / name)
         loaded = load_tokenizer(tmp_path / name / "tokenizer.json")
         assert type(loaded) is type(tokenizer)
@@ -210,6 +229,9 @@ def test_unseen_bangla_characters_encode(corpus):
     unigram = train_unigram(corpus, vocab_size=200, min_frequency=2, iterations=2)
     ids = unigram.encode(text)
     assert unigram.decode(ids) == text
+    wordpiece = train_wordpiece(corpus, vocab_size=200, min_frequency=2)
+    ids = wordpiece.encode(text)
+    assert wordpiece.decode(ids) == text
 
 
 def test_benchmark_shape(corpus):
@@ -222,7 +244,50 @@ def test_benchmark_shape(corpus):
         "punctuation",
         "emoji",
         "code",
+        "translit",
+        "digits",
+        "names",
+        "social",
     }
+    assert result["dev_max_unk_rate"] >= 0.0
+    assert result["dev_min_decode_fidelity"] >= 0.0
+
+
+def test_benchmark_gate_passes_on_bangla_dev(corpus):
+    tokenizer = train_unigram(corpus, vocab_size=300, min_frequency=2, iterations=2)
+    result = run_benchmark(tokenizer)
+    failures = check_benchmark(result)
+    assert failures == [], failures
+
+
+def test_benchmark_gate_detects_unk_regression(corpus):
+    tokenizer = train_unigram(corpus, vocab_size=300, min_frequency=2, iterations=2)
+    result = run_benchmark(tokenizer)
+    # An impossible unk threshold must be reported as a violation.
+    failures = check_benchmark(result, {"max_dev_unk_rate": -1.0})
+    assert any("dev_max_unk_rate" in f for f in failures)
+
+
+def test_benchmark_decodes_dev_sets_losslessly(corpus):
+    tokenizer = train_bpe(corpus, vocab_size=400, min_frequency=2)
+    for name in ("bangla", "mixed", "punctuation", "digits", "names"):
+        result = run_benchmark(tokenizer, {name: SAMPLE_TEXTS[name]})
+        assert result["per_set"][name]["decode_fidelity"] == 1.0
+
+
+def test_translit_set_is_preprocessed(corpus):
+    tokenizer = train_bpe(corpus, vocab_size=400, min_frequency=2)
+    stats = run_benchmark(tokenizer)["per_set"]["translit"]
+    # The romanized sample must be transliterated to Bangla before tokenizing,
+    # so it must contain zero unknowns and round-trip cleanly.
+    assert stats["unk_rate"] == 0.0
+    assert stats["decode_fidelity"] == 1.0
+
+
+def test_gated_sets_exclude_emoji_stress(corpus):
+    assert "emoji" not in GATED_SETS
+    assert "social" not in GATED_SETS
+    assert "bangla" in GATED_SETS
 
 
 def test_unigram_improves_over_initial_vocab(corpus):
@@ -239,3 +304,72 @@ def test_load_corpus_jsonl(tmp_path):
     )
     texts = load_corpus(tmp_path / "c.jsonl")
     assert texts == ["বাংলা ভাষা", "সাহিত্য ও সংস্কৃতি"]
+
+
+# --- WS-1 / WS-6 vocabulary freeze ----------------------------------------
+
+
+def test_corpus_digest_is_content_addressed():
+    from ml.tokenizer import corpus_digest
+
+    a = corpus_digest(["বাংলা ভাষা", "সাহিত্য"])
+    b = corpus_digest(["বাংলা ভাষা"])
+    c = corpus_digest(["বাংলা ভাষা", "সাহিত্য"])
+    assert a == c
+    assert a != b
+    assert len(a) == 12
+
+
+def test_version_id_includes_corpus_and_vocab():
+    from ml.tokenizer import version_id
+
+    v1 = version_id("cafe123", {"<unk>": 0, "ব": 1})
+    v2 = version_id("cafe124", {"<unk>": 0, "ব": 1})
+    v3 = version_id("cafe123", {"<unk>": 0, "ব": 2})
+    assert v1.startswith("1.0.0+cafe123.")
+    assert v1 != v2
+    assert v1 != v3
+
+
+def test_coverage_report_metrics(corpus):
+    from ml.tokenizer import coverage_report
+
+    tokenizer = train_bpe(corpus, vocab_size=400, min_frequency=2)
+    report = coverage_report(tokenizer, corpus)
+    assert 0.0 <= report["coverage"] <= 1.0
+    assert 0.0 <= report["unk_rate"] <= 1.0
+    assert report["tokens_per_char"] > 0.0
+    assert report["num_known"] > 0
+
+
+def test_coverage_report_full_coverage_on_seen_text(corpus):
+    from ml.tokenizer import coverage_report
+
+    tokenizer = train_bpe(corpus, vocab_size=400, min_frequency=1)
+    # Every char of the training corpus is in BOOTSTRAP_CHARS, so the
+    # tokenizer must cover the same text losslessly.
+    report = coverage_report(tokenizer, corpus[:10])
+    assert report["unk_rate"] == 0.0
+    assert report["coverage"] == 1.0
+
+
+def test_coverage_report_whitespace_not_penalized(corpus):
+    from ml.tokenizer import coverage_report
+
+    tokenizer = train_bpe(corpus, vocab_size=400, min_frequency=1)
+    # Newlines / tabs are encoded as word-marker tokens (not script chars), so
+    # they must not depress coverage. Regression for the 98.5%-vs-100% gap that
+    # was caused by counting U+000A in the denominator.
+    lines = [corpus[0], corpus[1], corpus[2]]
+    single = coverage_report(tokenizer, lines)
+    multi = coverage_report(tokenizer, ["\n".join(lines)])
+    assert single["coverage"] == multi["coverage"] == 1.0
+
+
+def test_export_vocab_matches_tokenizer(corpus):
+    from ml.tokenizer import export_vocab
+
+    tokenizer = train_bpe(corpus, vocab_size=400, min_frequency=2)
+    exported = export_vocab(tokenizer)
+    assert exported == tokenizer.vocab
+    assert "<unk>" in exported

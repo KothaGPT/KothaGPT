@@ -114,9 +114,7 @@ _ADDRESS_EN_RE = re.compile(
     r"\b\d{1,5}\s+(road|street|st\.?|avenue|ave\.?|lane|lane|bd|society|sector)\b",
     re.IGNORECASE,
 )
-_ADDRESS_BN_RE = re.compile(
-    r"(?:হাউস|বাসা|বাড়ি|রোড|সড়ক|গলি|লেন)\s*[০-৯0-9][০-৯0-9\-/]*"
-)
+_ADDRESS_BN_RE = re.compile(r"(?:হাউস|বাসা|বাড়ি|রোড|সড়ক|গলি|লেন)\s*[০-৯0-9][০-৯0-9\-/]*")
 
 PII_TYPES = ("email", "url", "phone", "ip", "credit_card", "nid", "passport", "address")
 
@@ -259,7 +257,7 @@ def quality_filter(
         pii = contains_pii(text)
         if pii:
             reasons.append(f"pii: {','.join(pii)}")
-    keep_len, len_reasons = length_filter(
+    _, len_reasons = length_filter(
         text, min_chars=min_chars, max_chars=max_chars, min_words=min_words
     )
     reasons.extend(len_reasons)

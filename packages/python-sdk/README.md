@@ -83,10 +83,12 @@ print(run.output)
 import asyncio
 from kothagpt.websocket import WebSocketClient
 
+
 async def main():
     async with WebSocketClient(base_url="ws://localhost:8000") as ws:
         completion = await ws.chat([{"role": "user", "content": "হ্যালো"}])
         print(completion.text)
+
 
 asyncio.run(main())
 ```
@@ -97,12 +99,12 @@ asyncio.run(main())
 import asyncio
 from kothagpt import AsyncKothaGPT
 
+
 async def main():
     async with AsyncKothaGPT() as client:
-        completion = await client.chat.create(
-            messages=[{"role": "user", "content": "হ্যালো"}]
-        )
+        completion = await client.chat.create(messages=[{"role": "user", "content": "হ্যালো"}])
         print(completion.text)
+
 
 asyncio.run(main())
 ```

@@ -1,0 +1,32 @@
+model:
+  architecture: decoder_transformer
+  vocab_size: 50000
+  hidden_size: 256
+  num_layers: 8
+  num_heads: 4
+  max_position_embeddings: 2048
+  rms_norm_eps: 1e-5
+  rope_theta: 10000
+  tie_word_embeddings: true
+
+training:
+  batch_size: 4
+  gradient_accumulation_steps: 8
+  learning_rate: 3.0e-4
+  max_steps: 500
+  warmup_steps: 50
+  min_lr: 3.0e-5
+  lr_schedule: cosine
+  mixed_precision: bf16
+
+data:
+  train: data/processed/train
+  validation: data/processed/validation
+
+tier:
+  name: nano
+  context_window: 2048
+  device_profile: cpu
+  quant_level: int8
+  cost_per_1k_tokens: 0.001
+  target_latency_p95_ms: 100

@@ -20,6 +20,7 @@ TRANSLIT_FIXTURE = FIXTURES / "transliteration.json"
 
 # --- WS-2: Unicode normalization -------------------------------------------
 
+
 def test_fix_bengali_yaphala_converts_zwj_to_hasanta():
     text = "ক\u200dয"  # ka + ZWJ + ya
     out = normalize.fix_bengali_yaphala(text)
@@ -47,6 +48,7 @@ def test_nfkc_latin_only_normalizes_latin_but_not_bangla():
 
 
 # --- WS-3: punctuation normalization ----------------------------------------
+
 
 def test_danda_double_and_runs_collapse():
     assert punctuation.normalize_bangla_punctuation("কথা॥") == "কথা।"
@@ -80,6 +82,7 @@ def test_normalize_text_digit_style():
 
 # --- WS-4: mixed Bangla/English text ---------------------------------------
 
+
 def test_bengali_ratio_and_is_bangla():
     bn = "বাংলা ভাষা বাংলাদেশের মানুষের মাতৃভাষা।"
     assert mixed.bengali_ratio(bn) > 0.9
@@ -106,6 +109,7 @@ def test_ensure_script_spacing():
 
 
 # --- WS-5: transliteration ---------------------------------------------------
+
 
 def test_latin_to_bangla_known_words():
     assert transliterate.latin_to_bangla("ami") == "আমি"

@@ -1,8 +1,8 @@
-
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ...core import backend_factory
+from ..auth import require_api_token
+from ..backend import get_active_backend
 from ..schemas import Tool, ToolInvokeRequest, ToolInvokeResponse
 
 
@@ -11,18 +11,22 @@ class ToolList(BaseModel):
     data: list[Tool]
 
 
-router = APIRouter(prefix="/v1/tools", tags=["tools"])
+router = APIRouter(
+    prefix="/v1/tools",
+    tags=["tools"],
+    dependencies=[Depends(require_api_token)],
+)
 
 
 @router.get("", response_model=ToolList)
 def list_tools() -> ToolList:
-    backend = backend_factory.create()
+    backend = get_active_backend("tools")
     return ToolList(data=backend.list_tools())
 
 
 @router.get("/{name}", response_model=Tool)
 def get_tool(name: str) -> Tool:
-    backend = backend_factory.create()
+    backend = get_active_backend("tools")
     for tool in backend.list_tools():
         if tool.function.name == name:
             return tool
@@ -31,7 +35,7 @@ def get_tool(name: str) -> Tool:
 
 @router.post("/{name}/invoke", response_model=ToolInvokeResponse)
 def invoke_tool(name: str, request: ToolInvokeRequest) -> ToolInvokeResponse:
-    backend = backend_factory.create()
+    backend = get_active_backend("tools")
     try:
         return backend.invoke_tool(name, request.arguments)
     except KeyError as exc:

@@ -127,7 +127,10 @@ async fn agent_stream() {
 
 #[tokio::test]
 async fn websocket_chat() {
-    let mut ws = WebSocketClient::connect(&ws_base_url()).await.unwrap();
+    let token = env::var("KOTHAGPT_API_TOKEN").ok();
+    let mut ws = WebSocketClient::connect_with_api_key(&ws_base_url(), token.as_deref())
+        .await
+        .unwrap();
     let completion = ws.chat(vec![Message::user("হ্যালো")]).await.unwrap();
     assert!(!completion.text().is_empty());
 }

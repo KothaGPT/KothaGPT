@@ -294,7 +294,9 @@ def near_duplicate_groups_sharded(
                 for idx, record in enumerate(records):
                     key = text_hash(record[text_key])
                     key_to_idx[key] = idx
-                    sig = minhash(record[text_key], num_hashes=num_hashes, shingle_size=shingle_size)
+                    sig = minhash(
+                        record[text_key], num_hashes=num_hashes, shingle_size=shingle_size
+                    )
                     sigs_fh.write(_signature_bytes(sig))
                     for b in range(num_bands):
                         band_fhs[b].write(key + "\n")
@@ -312,13 +314,20 @@ def near_duplicate_groups_sharded(
 
         parent = {key: key for key in key_to_idx}
         for band_path in sorted(work.glob("band_*.txt")):
-            members = [line.strip() for line in band_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            members = [
+                line.strip()
+                for line in band_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
             if len(members) < 2:
                 continue
             for i in range(len(members)):
                 for j in range(i + 1, len(members)):
                     ka, kb = members[i], members[j]
-                    if _jaccard_estimate(read_sig(key_to_idx[ka]), read_sig(key_to_idx[kb])) >= threshold:
+                    if (
+                        _jaccard_estimate(read_sig(key_to_idx[ka]), read_sig(key_to_idx[kb]))
+                        >= threshold
+                    ):
                         ra = find_root(parent, ka)
                         rb = find_root(parent, kb)
                         if ra != rb:
@@ -354,7 +363,9 @@ def deduplicate_with_stats(
     supporting ``__contains__``/``add`` over sha256 digests).
     """
     kept: list[dict[str, Any]] = []
-    seen: set[str] | BloomFilter | ExactDedupState = exact_store if exact_store is not None else set()
+    seen: set[str] | BloomFilter | ExactDedupState = (
+        exact_store if exact_store is not None else set()
+    )
     removed_exact = 0
     for record in records:
         text = record[text_key]

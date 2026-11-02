@@ -33,7 +33,7 @@ def _load_manifest(path: Path) -> list[dict]:
     if isinstance(data, dict):
         data = data.get("datasets", [])
     if not isinstance(data, list):
-        raise ValueError("manifest must be a JSON list (or {datasets: [...]})")
+        raise TypeError("manifest must be a JSON list (or {datasets: [...]})")
     required = {"name", "url", "license"}
     for entry in data:
         missing = required - set(entry)
@@ -66,7 +66,7 @@ def fetch_manifest(manifest_path: Path, raw_dir: Path, assume_yes: bool = False)
         target = raw_dir / name
         target.mkdir(parents=True, exist_ok=True)
         out_file = target / url.split("/")[-1] or "data.bin"
-        urllib.request.urlretrieve(url, out_file)  # noqa: S310 - user-provided URL
+        urllib.request.urlretrieve(url, out_file)
         print(f"[{name}] saved to {out_file}")
         results.append(
             {

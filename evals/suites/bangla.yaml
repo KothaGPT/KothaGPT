@@ -1,10 +1,17 @@
 name: bangla-core
+version: v1
 tasks:
   - bangla_qa
-  - bangla_generation
   - bangla_translation
   - bangla_summarization
+  - bangla_generation
+instances:
+  bangla_qa: 576
+  bangla_translation: 1120
+  bangla_summarization: 108
+  bangla_generation: 26
 metrics:
   - exact_match
   - rouge
-  - human_preference
+  - language_detection
+  - bengali_script_ratio

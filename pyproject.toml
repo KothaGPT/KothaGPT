@@ -1,8 +1,70 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = [".", "packages/python-sdk"]
+include = ["ml*", "data*", "evals*", "services*", "scripts*", "kothagpt*"]
+exclude = ["tests*", "apps*", "configs*", "infra*", "packages*", "examples*", "docs*", "node_modules*"]
+
 [project]
 name = "kothagpt"
 version = "0.1.0"
 description = "Bangla-first AI platform"
 requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+    "sqlalchemy>=2.0",
+    "redis>=5.0",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+    "kothagpt-cli",
+]
+
+[project.optional-dependencies]
+ml = [
+    "torch>=2.0",
+    "numpy>=1.26",
+]
+
+[dependency-groups]
+ml = [
+    "torch>=2.0",
+    "numpy>=1.26",
+]
+dev = [
+    "fakeredis>=2.37.1",
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "starlette>=0.40",
+]
+
+[tool.uv]
+# Install the dev + ml groups by default so `uv sync` yields a venv that can
+# run the full test suite (torch/numpy are in the optional `ml` extra).
+default-groups = ["dev", "ml"]
+
+# PyTorch ships CPU-only wheels on a separate index. The default PyPI build
+# pulls CUDA runtime libs (libnvrtc.so.13) that are unavailable on CPU-only
+# hosts, so torch is sourced from the CPU index (matches CI).
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+kothagpt-cli = { path = "packages/cli" }
+torch = { index = "pytorch-cpu" }
+
+[tool.vercel]
+entrypoint = "services.api.app:app"
+
+[project.scripts]
+kothagpt-doctor = "scripts.doctor:main"
+kothagpt-baseline = "scripts.baseline:main"
 
 [tool.ruff]
 line-length = 100

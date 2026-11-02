@@ -25,9 +25,7 @@ Script = Literal["bn", "la", "other"]
 _BENGALI_RE = "[\u0980-\u09ff]"
 _LATIN_RE = r"[A-Za-z]"
 
-_MIXED_BOUNDARY_RE = re.compile(
-    rf"(?<=[A-Za-z])(?={_BENGALI_RE})|(?<={_BENGALI_RE})(?=[A-Za-z])"
-)
+_MIXED_BOUNDARY_RE = re.compile(rf"(?<=[A-Za-z])(?={_BENGALI_RE})|(?<={_BENGALI_RE})(?=[A-Za-z])")
 _BENGALI_CHAR_RE = re.compile(_BENGALI_RE)
 _LATIN_CHAR_RE = re.compile(_LATIN_RE)
 

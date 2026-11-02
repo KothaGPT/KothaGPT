@@ -1,0 +1,9 @@
+name: sft-fc
+version: v1
+data_dir: ../../data/benchmarks/sft/v1
+tasks:
+  - sft-fc
+metrics:
+  - exact_match
+  - normalized_match
+  - function_call_match

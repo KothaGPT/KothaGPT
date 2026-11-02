@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
 
@@ -36,9 +36,9 @@ class DatasetVersion:
         shards: list[dict],
         files: dict,
         version_label: str | None = None,
-    ) -> "DatasetVersion":
+    ) -> DatasetVersion:
         """Build a version, computing a content-addressed ``version_id``."""
-        created_at = datetime.now(timezone.utc).isoformat()
+        created_at = datetime.now(UTC).isoformat()
         base = {
             "created_at": created_at,
             "config": config,

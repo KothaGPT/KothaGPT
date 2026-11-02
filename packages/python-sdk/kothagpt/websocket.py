@@ -19,7 +19,9 @@ class WebSocketClient:
 
     def __init__(self, base_url: str = "ws://localhost:8000", api_key: str | None = None) -> None:
         if websockets is None:  # pragma: no cover
-            raise APIError(0, "The 'websockets' package is required. pip install kothagpt[websockets]")
+            raise APIError(
+                0, "The 'websockets' package is required. pip install kothagpt[websockets]"
+            )
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self._conn: ClientConnection | None = None
@@ -42,7 +44,9 @@ class WebSocketClient:
     async def __aexit__(self, *exc: object) -> None:
         await self.close()
 
-    async def _request(self, type: str, payload: dict[str, Any], id: str | None = None) -> dict[str, Any]:
+    async def _request(
+        self, type: str, payload: dict[str, Any], id: str | None = None
+    ) -> dict[str, Any]:
         if self._conn is None:
             raise APIError(0, "Not connected; call connect() first")
         await self._conn.send(json.dumps({"id": id, "type": type, "payload": payload}))
@@ -54,11 +58,15 @@ class WebSocketClient:
         reply = await self._request("chat", {"messages": messages, **kwargs})
         return ChatCompletion.model_validate(reply["payload"])
 
-    async def embed(self, input: str | list[str], model: str = "kothagpt-embed") -> EmbeddingResponse:
+    async def embed(
+        self, input: str | list[str], model: str = "kothagpt-embed"
+    ) -> EmbeddingResponse:
         reply = await self._request("embed", {"input": input, "model": model})
         return EmbeddingResponse.model_validate(reply["payload"])
 
-    async def rerank(self, query: str, documents: list[str], top_n: int | None = None) -> RerankResponse:
+    async def rerank(
+        self, query: str, documents: list[str], top_n: int | None = None
+    ) -> RerankResponse:
         reply = await self._request(
             "rerank", {"query": query, "documents": documents, "top_n": top_n}
         )

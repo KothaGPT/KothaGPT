@@ -124,9 +124,7 @@ def load_title_blocklist(path: str | Path | None) -> frozenset[str]:
     if not p.exists():
         return frozenset()
     titles = frozenset(
-        line.strip()
-        for line in p.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        line.strip() for line in p.read_text(encoding="utf-8").splitlines() if line.strip()
     )
     return titles
 

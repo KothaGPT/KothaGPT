@@ -21,6 +21,7 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
+    "prettier": "^3.3.3",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   },

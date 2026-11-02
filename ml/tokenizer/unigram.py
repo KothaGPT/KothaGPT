@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
-from .base import BOOTSTRAP_CHARS, SPECIAL_TOKENS, UNK, BaseTokenizer, _WORD_MARKER
+from .base import _WORD_MARKER, BOOTSTRAP_CHARS, SPECIAL_TOKENS, UNK, BaseTokenizer
 
 __all__ = ["UnigramTokenizer", "train_unigram"]
 
@@ -62,7 +63,7 @@ def train_unigram(
     max_subword_len: int = 8,
     iterations: int = 8,
     log: Callable[[str], None] | None = None,
-) -> "UnigramTokenizer":
+) -> UnigramTokenizer:
     """Train a Unigram tokenizer from a list of texts."""
     if vocab_size <= len(SPECIAL_TOKENS):
         raise ValueError(f"vocab_size must exceed {len(SPECIAL_TOKENS)} special tokens")
@@ -148,7 +149,7 @@ class UnigramTokenizer(BaseTokenizer):
         return data
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "UnigramTokenizer":
+    def from_dict(cls, data: dict[str, Any]) -> UnigramTokenizer:
         vocab = data["vocab"]
         probs = data.get("probs", {})
         if UNK not in vocab:

@@ -1,0 +1,31 @@
+{
+  "name": "bangla",
+  "version": "v1",
+  "tasks": {
+    "bangla_qa": {
+      "total": 576,
+      "dev": 468,
+      "test": 108
+    },
+    "bangla_translation": {
+      "total": 1120,
+      "dev": 892,
+      "test": 228
+    },
+    "bangla_summarization": {
+      "total": 108,
+      "dev": 88,
+      "test": 20
+    },
+    "bangla_generation": {
+      "total": 26,
+      "dev": 21,
+      "test": 5
+    },
+    "bangla_robustness": {
+      "total": 24,
+      "dev": 20,
+      "test": 4
+    }
+  }
+}

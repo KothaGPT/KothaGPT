@@ -1,0 +1,8 @@
+name: bangla-long
+version: long
+tasks:
+  - needle
+  - long_ppl
+metrics:
+  - needle_recall
+  - ppl

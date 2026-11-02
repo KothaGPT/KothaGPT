@@ -1,0 +1,12 @@
+{
+  "name": "bangla",
+  "version": "long",
+  "tasks": {
+    "needle": {
+      "total": 75
+    },
+    "long_ppl": {
+      "total": 3
+    }
+  }
+}

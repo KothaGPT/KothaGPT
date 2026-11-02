@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 // WebSocketClient is a JSON-over-WebSocket client for the /v1/ws endpoint.
@@ -15,8 +18,24 @@ type WebSocketClient struct {
 }
 
 // DialWebSocket connects to the /v1/ws endpoint of baseURL (e.g. ws://localhost:8000).
-func DialWebSocket(ctx context.Context, baseURL string) (*WebSocketClient, error) {
-	conn, _, err := websocket.Dial(ctx, trimRightSlash(baseURL)+"/v1/ws", nil)
+// If apiKey is provided, it is sent as a Bearer token (header and query param
+// for compatibility with browser-style handshakes).
+func DialWebSocket(ctx context.Context, baseURL string, apiKey ...string) (*WebSocketClient, error) {
+	wsURL := trimRightSlash(baseURL) + "/v1/ws"
+	var opts *websocket.DialOptions
+	if len(apiKey) > 0 && strings.TrimSpace(apiKey[0]) != "" {
+		token := strings.TrimSpace(apiKey[0])
+		// Query param for browser-style compatibility (server also accepts header)
+		if strings.Contains(wsURL, "?") {
+			wsURL += "&token=" + url.QueryEscape(token)
+		} else {
+			wsURL += "?token=" + url.QueryEscape(token)
+		}
+		opts = &websocket.DialOptions{
+			HTTPHeader: http.Header{"Authorization": []string{"Bearer " + token}},
+		}
+	}
+	conn, _, err := websocket.Dial(ctx, wsURL, opts)
 	if err != nil {
 		return nil, err
 	}

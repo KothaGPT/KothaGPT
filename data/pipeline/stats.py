@@ -17,7 +17,7 @@ def _percentiles(values: list[int]) -> dict[str, float]:
         return {}
     values = sorted(values)
     n = len(values)
-    pick = lambda p: values[max(0, int(p * (n - 1)))]  # noqa: E731
+    pick = lambda p: values[max(0, int(p * (n - 1)))]
     return {
         "min": float(values[0]),
         "p10": float(pick(0.10)),
@@ -120,6 +120,21 @@ def write_report(stats: dict, out_path: Path) -> Path:
         lines.append("| --- | --- |")
         for k, v in stats.get("splits", {}).items():
             lines.append(f"| {k} | {v:,} |")
+        lines.append("")
+    if stats.get("quality_scores"):
+        quality_scores = stats["quality_scores"]
+        lines.append("## Quality score distribution")
+        for key in ("count", "min", "p10", "median", "mean", "p90", "max"):
+            if key in quality_scores:
+                value = quality_scores[key]
+                if key == "count":
+                    lines.append(f"- **{key}**: {value:,}")
+                else:
+                    lines.append(f"- **{key}**: {value:.3f}")
+        histogram = quality_scores.get("histogram", {})
+        if histogram:
+            lines.extend(["", "| score range | records |", "| --- | ---: |"])
+            lines.extend(f"| {bucket} | {count:,} |" for bucket, count in histogram.items())
         lines.append("")
     if stats.get("dedup"):
         dedup_stats = stats["dedup"]

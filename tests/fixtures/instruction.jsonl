@@ -1,0 +1,7 @@
+{"instruction":"বাংলায় শুভেচ্ছা লিখুন।","output":"শুভেচ্ছা! কেমন আছেন?","language":"bn","category":"instruction"}
+{"instruction":"Write a Python function that adds two numbers.","output":"def add(a, b):\n    return a + b","language":"en","category":"coding"}
+{"instruction":"Translate hello to Bengali.","output":"হ্যালো","language":"multilingual","category":"instruction"}
+{"instruction":"Why is the sky blue? Give one reason.","output":"Because the atmosphere scatters blue light more strongly.","language":"en","category":"reasoning"}
+{"messages":[{"role":"user","content":"How are you?"},{"role":"assistant","content":"I am well, thank you."}],"output":"I am well, thank you.","language":"en","category":"conversation"}
+{"instruction":"Call the weather function.","output":"{\"name\":\"get_weather\",\"arguments\":{\"city\":\"Dhaka\"}}","function_call":{"name":"get_weather","arguments":{"city":"Dhaka"}},"language":"en","category":"function_call"}
+{"instruction":"Use the search tool for KothaGPT.","output":"{\"tool\":\"search\",\"query\":\"KothaGPT\"}","tools":[{"name":"search","arguments":{"query":"KothaGPT"}}],"language":"en","category":"tool_use"}

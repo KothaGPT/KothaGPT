@@ -70,10 +70,7 @@ Classifier = Callable[[str], float]
 _BOUNDARY = r"(?<![\w\u0980-\u09ff])"
 _WORD_CHAR = r"(?![\w\u0980-\u09ff])"
 _COMPILED: dict[str, list[tuple[str, re.Pattern[str]]]] = {
-    cat: [
-        (term, re.compile(_BOUNDARY + re.escape(term) + _WORD_CHAR))
-        for term in terms
-    ]
+    cat: [(term, re.compile(_BOUNDARY + re.escape(term) + _WORD_CHAR)) for term in terms]
     for cat, terms in TOXIC_TERMS.items()
 }
 

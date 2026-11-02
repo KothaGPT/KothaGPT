@@ -1,0 +1,81 @@
+# WS-5 — Model routing configuration.
+#
+# Defines task-class → tier mapping, complexity thresholds, escalation chain,
+# and cost/latency SLA targets. Loaded by ml.inference.router.ModelRouter.
+
+tiers:
+  nano:
+    model_id: kothagpt-nano
+    cost_per_1k_tokens: 0.001
+    target_latency_p95_ms: 100
+    device_profile: cpu
+    quant_level: int8
+    context_window: 2048
+  small:
+    model_id: kothagpt-small
+    cost_per_1k_tokens: 0.005
+    target_latency_p95_ms: 300
+    device_profile: cpu
+    quant_level: none
+    context_window: 4096
+  medium:
+    model_id: kothagpt-medium
+    cost_per_1k_tokens: 0.02
+    target_latency_p95_ms: 1000
+    device_profile: gpu
+    quant_level: int8
+    context_window: 8192
+  large:
+    model_id: kothagpt-large
+    cost_per_1k_tokens: 0.08
+    target_latency_p95_ms: 2000
+    device_profile: gpu
+    quant_level: int4
+    context_window: 16384
+
+# Task class → default tier. Explicit user tier preference overrides this.
+task_class_tiers:
+  autocomplete: nano
+  short_chat: nano
+  general_chat: small
+  coding_assist: small
+  rag: small
+  reasoning: medium
+  long_context: medium
+  agent: medium
+  multimodal: large
+  frontier: large
+
+# Escalation chain when a tier's measured quality is below the quality floor.
+escalation_chain:
+  nano: [small, medium, large]
+  small: [medium, large]
+  medium: [large]
+  large: []
+
+# Measured quality per tier (used by should_escalate). Updated by eval runs.
+tier_quality:
+  nano: 0.62
+  small: 0.76
+  medium: 0.88
+  large: 0.96
+
+# Complexity signal thresholds that can override the task-class default.
+complexity:
+  short_prompt_tokens: 100
+  medium_prompt_tokens: 512
+  long_prompt_tokens: 2048
+  expected_tokens_short: 64
+  expected_tokens_medium: 256
+
+# Latency SLA per tier, in milliseconds. Used by the circuit breaker.
+latency_sla_ms:
+  nano: 100
+  small: 300
+  medium: 1000
+  large: 2000
+
+# Cost improvement target vs always-large baseline (WS-5 metric).
+cost:
+  improvement_target: 0.30
+  escalation_rate_target: 0.10

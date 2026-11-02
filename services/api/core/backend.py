@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from collections.abc import AsyncIterator, Iterator
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from .config import normalize_backend_name
 
 if TYPE_CHECKING:
     from ..api.schemas import (
@@ -20,6 +24,30 @@ if TYPE_CHECKING:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class BackendCapabilities:
+    """The supported surface area exposed by a backend implementation."""
+
+    chat: bool = True
+    streaming: bool = True
+    embeddings: bool = True
+    rerank: bool = True
+    tools: bool = True
+    agents: bool = True
+    websocket: bool = True
+
+    def as_dict(self) -> dict[str, bool]:
+        return {
+            "chat": self.chat,
+            "streaming": self.streaming,
+            "embeddings": self.embeddings,
+            "rerank": self.rerank,
+            "tools": self.tools,
+            "agents": self.agents,
+            "websocket": self.websocket,
+        }
+
+
 class Backend(ABC):
     """Interface implemented by inference/agent backends.
 
@@ -28,61 +56,58 @@ class Backend(ABC):
     whole API surface be exercised without any model weights.
     """
 
-    @abstractmethod
-    def list_models(self) -> list[Model]:
-        ...
+    capabilities: BackendCapabilities = BackendCapabilities()
+
+    def get_capabilities(self) -> BackendCapabilities:
+        return self.capabilities
 
     @abstractmethod
-    def chat(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
-        ...
+    def list_models(self) -> list[Model]: ...
 
     @abstractmethod
-    def chat_stream(self, request: ChatCompletionRequest) -> Iterator[ChatCompletionChunk]:
-        ...
+    def chat(self, request: ChatCompletionRequest) -> ChatCompletionResponse: ...
 
     @abstractmethod
-    def embed(self, model: str, inputs: list[str]) -> EmbeddingResponse:
-        ...
+    def chat_stream(self, request: ChatCompletionRequest) -> Iterator[ChatCompletionChunk]: ...
 
     @abstractmethod
-    def rerank(self, model: str, query: str, documents: list[str], top_n: int | None) -> RerankResponse:
-        ...
+    def embed(self, model: str, inputs: list[str]) -> EmbeddingResponse: ...
 
     @abstractmethod
-    def list_tools(self) -> list[Tool]:
-        ...
+    def rerank(
+        self, model: str, query: str, documents: list[str], top_n: int | None
+    ) -> RerankResponse: ...
 
     @abstractmethod
-    def invoke_tool(self, name: str, arguments: dict[str, Any]) -> ToolInvokeResponse:
-        ...
+    def list_tools(self) -> list[Tool]: ...
 
     @abstractmethod
-    def create_agent(self, spec: AgentSpec) -> Agent:
-        ...
+    def invoke_tool(self, name: str, arguments: dict[str, Any]) -> ToolInvokeResponse: ...
 
     @abstractmethod
-    def get_agent(self, agent_id: str) -> Agent:
-        ...
+    def create_agent(self, spec: AgentSpec) -> Agent: ...
 
     @abstractmethod
-    def list_agents(self) -> list[Agent]:
-        ...
+    def get_agent(self, agent_id: str) -> Agent: ...
 
     @abstractmethod
-    def delete_agent(self, agent_id: str) -> None:
-        ...
+    def list_agents(self) -> list[Agent]: ...
 
     @abstractmethod
-    def run_agent(self, agent_id: str, message: str) -> AgentRun:
-        ...
+    def delete_agent(self, agent_id: str) -> None: ...
 
     @abstractmethod
-    def get_run(self, run_id: str) -> AgentRun:
-        ...
+    def run_agent(self, agent_id: str, message: str) -> AgentRun: ...
 
     @abstractmethod
-    def run_agent_stream(self, agent_id: str, message: str) -> AsyncIterator[dict[str, Any]]:
-        ...
+    def get_run(self, run_id: str) -> AgentRun: ...
+
+    @abstractmethod
+    def run_agent_stream(self, agent_id: str, message: str) -> AsyncIterator[dict[str, Any]]: ...
+
+
+class BackendUnavailableError(RuntimeError):
+    """Raised when a configured backend cannot serve inference requests."""
 
 
 class BackendFactory:
@@ -93,12 +118,15 @@ class BackendFactory:
         self._instances: dict[str, Backend] = {}
 
     def register(self, name: str, backend: type[Backend]) -> None:
-        self._registered[name] = backend
+        normalized = normalize_backend_name(name)
+        if not isinstance(backend, type) or not issubclass(backend, Backend):
+            raise TypeError(
+                f"Backend registration for {normalized!r} must be a Backend subclass"
+            )
+        self._registered[normalized] = backend
 
     def create(self, name: str | None = None) -> Backend:
-        import os
-
-        chosen = name or os.getenv("KOTHAGPT_BACKEND", "mock")
+        chosen = normalize_backend_name(name)
         if chosen not in self._registered:
             raise ValueError(f"Unknown backend {chosen!r}; registered: {sorted(self._registered)}")
         # Backends are shared singletons per process so in-memory state
@@ -106,3 +134,18 @@ class BackendFactory:
         if chosen not in self._instances:
             self._instances[chosen] = self._registered[chosen]()
         return self._instances[chosen]
+
+    def list(self) -> list[str]:
+        return sorted(self._registered)
+
+    def describe(self, name: str | None = None) -> dict[str, dict[str, bool]]:
+        """Expose the supported feature matrix without instantiating heavy backends."""
+        if name is None:
+            return OrderedDict(
+                (registered_name, self._registered[registered_name].capabilities.as_dict())
+                for registered_name in sorted(self._registered)
+            )
+        normalized = normalize_backend_name(name)
+        if normalized not in self._registered:
+            raise ValueError(f"Unknown backend {normalized!r}; registered: {sorted(self._registered)}")
+        return {normalized: self._registered[normalized].capabilities.as_dict()}

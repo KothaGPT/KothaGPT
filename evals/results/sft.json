@@ -1,0 +1,53 @@
+{
+  "groups": {
+    "bn/instruction": {
+      "count": 1,
+      "exact": 1,
+      "normalized": 1,
+      "exact_match": 1.0,
+      "normalized_match": 1.0
+    },
+    "en/coding": {
+      "count": 1,
+      "exact": 1,
+      "normalized": 1,
+      "exact_match": 1.0,
+      "normalized_match": 1.0
+    },
+    "multilingual/instruction": {
+      "count": 1,
+      "exact": 0,
+      "normalized": 1,
+      "exact_match": 0.0,
+      "normalized_match": 1.0
+    },
+    "en/reasoning": {
+      "count": 1,
+      "exact": 0,
+      "normalized": 0,
+      "exact_match": 0.0,
+      "normalized_match": 0.0
+    },
+    "en/conversation": {
+      "count": 1,
+      "exact": 1,
+      "normalized": 1,
+      "exact_match": 1.0,
+      "normalized_match": 1.0
+    },
+    "en/function_call": {
+      "count": 1,
+      "exact": 0,
+      "normalized": 0,
+      "exact_match": 0.0,
+      "normalized_match": 0.0
+    },
+    "en/tool_use": {
+      "count": 1,
+      "exact": 1,
+      "normalized": 1,
+      "exact_match": 1.0,
+      "normalized_match": 1.0
+    }
+  }
+}

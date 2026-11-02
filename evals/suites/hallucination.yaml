@@ -1,0 +1,9 @@
+name: Bangla Hallucination
+version: v1
+tasks:
+  - grounded_qa
+metrics:
+  - context_token_coverage
+  - lexical_unsupported_token_rate
+  - semantic_entailment
+  - semantic_contradiction

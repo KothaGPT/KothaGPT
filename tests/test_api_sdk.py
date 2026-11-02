@@ -1,16 +1,36 @@
 import json
 
+import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from services.api.app import app
 
 client = TestClient(app)
 
+TEST_TOKEN = "test-token-abc123"
+AUTH = {"Authorization": f"Bearer {TEST_TOKEN}"}
+
+
+@pytest.fixture(autouse=True)
+def _api_token(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("KOTHAGPT_API_TOKEN", TEST_TOKEN)
+    yield
+
 
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json()["status"] == "ok"
+    body = r.json()
+    # KGPT-002: status reflects the active runtime contract. A mock/example
+    # backend is reported as "degraded" so callers cannot mistake it for a
+    # production model runtime; the runtime snapshot is always present.
+    assert body["status"] in ("ok", "degraded")
+    assert body["service"] == "kothagpt-api"
+    assert "runtime" in body
+    runtime = body["runtime"]
+    assert runtime["backend"] == "mock"
+    assert runtime["production"] is False
 
 
 def test_list_models():
@@ -117,13 +137,13 @@ def test_rerank_orders_by_relevance():
 
 
 def test_tools_list_and_get():
-    r = client.get("/v1/tools")
+    r = client.get("/v1/tools", headers=AUTH)
     assert r.status_code == 200
     names = [t["function"]["name"] for t in r.json()["data"]]
     assert "calculator" in names
     assert "current_time" in names
 
-    r2 = client.get("/v1/tools/calculator")
+    r2 = client.get("/v1/tools/calculator", headers=AUTH)
     assert r2.status_code == 200
     assert r2.json()["function"]["name"] == "calculator"
 
@@ -132,48 +152,84 @@ def test_tool_invoke_calculator():
     r = client.post(
         "/v1/tools/calculator/invoke",
         json={"name": "calculator", "arguments": {"expression": "(2 + 3) * 4"}},
+        headers=AUTH,
     )
     assert r.status_code == 200
     assert r.json()["result"]["value"] == 20
 
 
 def test_tool_invoke_unknown_404():
-    r = client.post("/v1/tools/nope/invoke", json={"name": "nope", "arguments": {}})
+    r = client.post("/v1/tools/nope/invoke", json={"name": "nope", "arguments": {}}, headers=AUTH)
     assert r.status_code == 404
+
+
+def test_calculator_rejects_unsafe_expressions():
+    unsafe = [
+        "__import__('os').system('true')",
+        "().__class__.__bases__[0].__subclasses__()",
+        "9 ** 99",
+        "1e308 * 10",
+        "-" * 25 + "1",
+        "x + 1",
+        "a" * 201,
+    ]
+    for expression in unsafe:
+        r = client.post(
+            "/v1/tools/calculator/invoke",
+            json={"name": "calculator", "arguments": {"expression": expression}},
+            headers=AUTH,
+        )
+        assert r.status_code == 200
+        value = r.json()["result"]["value"]
+        assert isinstance(value, str) and value.startswith("error:"), (expression, value)
+
+
+def test_calculator_accepts_safe_expressions():
+    cases = {"(2 + 3) * 4": 20, "2 ^ 10": 1024, "-7 % 3": 2, "10 / 4": 2.5}
+    for expression, expected in cases.items():
+        r = client.post(
+            "/v1/tools/calculator/invoke",
+            json={"name": "calculator", "arguments": {"expression": expression}},
+            headers=AUTH,
+        )
+        assert r.status_code == 200
+        assert r.json()["result"]["value"] == expected
 
 
 def test_agents_crud_and_run():
     created = client.post(
         "/v1/agents",
         json={"name": "helper", "description": "test agent", "tools": ["calculator"]},
+        headers=AUTH,
     )
     assert created.status_code == 201
     agent_id = created.json()["id"]
 
-    listed = client.get("/v1/agents").json()["data"]
+    listed = client.get("/v1/agents", headers=AUTH).json()["data"]
     assert any(a["id"] == agent_id for a in listed)
 
-    run = client.post(f"/v1/agents/{agent_id}/runs", json={"message": "তুমি কেমন আছ?"})
+    run = client.post(f"/v1/agents/{agent_id}/runs", json={"message": "তুমি কেমন আছ?"}, headers=AUTH)
     assert run.status_code == 201
     run_body = run.json()
     assert run_body["status"] == "completed"
     assert run_body["output"]
 
-    fetched = client.get(f"/v1/agents/{agent_id}/runs/{run_body['id']}")
+    fetched = client.get(f"/v1/agents/{agent_id}/runs/{run_body['id']}", headers=AUTH)
     assert fetched.status_code == 200
     assert fetched.json()["status"] == "completed"
 
-    assert client.delete(f"/v1/agents/{agent_id}").status_code == 204
-    assert client.get(f"/v1/agents/{agent_id}").status_code == 404
+    assert client.delete(f"/v1/agents/{agent_id}", headers=AUTH).status_code == 204
+    assert client.get(f"/v1/agents/{agent_id}", headers=AUTH).status_code == 404
 
 
 def test_agent_run_stream_sse():
-    created = client.post("/v1/agents", json={"name": "streamer"}).json()
+    created = client.post("/v1/agents", json={"name": "streamer"}, headers=AUTH).json()
     agent_id = created["id"]
     with client.stream(
         "POST",
         f"/v1/agents/{agent_id}/runs/stream",
         json={"message": "হ্যালো"},
+        headers=AUTH,
     ) as r:
         assert r.status_code == 200
         text = r.read().decode()
@@ -183,8 +239,16 @@ def test_agent_run_stream_sse():
 
 
 def test_websocket_chat():
-    with client.websocket_connect("/v1/ws") as ws:
-        ws.send_text(json.dumps({"id": "1", "type": "chat", "payload": {"messages": [{"role": "user", "content": "হ্যালো"}]}}))
+    with client.websocket_connect("/v1/ws", headers=AUTH) as ws:
+        ws.send_text(
+            json.dumps(
+                {
+                    "id": "1",
+                    "type": "chat",
+                    "payload": {"messages": [{"role": "user", "content": "হ্যালো"}]},
+                }
+            )
+        )
         reply = json.loads(ws.receive_text())
         assert reply["id"] == "1"
         assert reply["type"] == "chat"
@@ -192,7 +256,7 @@ def test_websocket_chat():
 
 
 def test_websocket_ping_and_models():
-    with client.websocket_connect("/v1/ws") as ws:
+    with client.websocket_connect("/v1/ws", headers=AUTH) as ws:
         ws.send_text(json.dumps({"id": "a", "type": "ping", "payload": {}}))
         assert json.loads(ws.receive_text())["payload"] == {"pong": True}
         ws.send_text(json.dumps({"id": "b", "type": "models.list", "payload": {}}))
@@ -201,9 +265,70 @@ def test_websocket_ping_and_models():
 
 
 def test_websocket_agents_create_and_run():
-    with client.websocket_connect("/v1/ws") as ws:
-        ws.send_text(json.dumps({"id": "1", "type": "agents.create", "payload": {"name": "ws-agent"}}))
+    with client.websocket_connect("/v1/ws", headers=AUTH) as ws:
+        ws.send_text(
+            json.dumps({"id": "1", "type": "agents.create", "payload": {"name": "ws-agent"}})
+        )
         agent = json.loads(ws.receive_text())["payload"]
-        ws.send_text(json.dumps({"id": "2", "type": "agents.run", "payload": {"agent_id": agent["id"], "message": "hi"}}))
+        ws.send_text(
+            json.dumps(
+                {
+                    "id": "2",
+                    "type": "agents.run",
+                    "payload": {"agent_id": agent["id"], "message": "hi"},
+                }
+            )
+        )
         run = json.loads(ws.receive_text())["payload"]
         assert run["status"] == "completed"
+
+
+def test_websocket_token_via_query_param():
+    with client.websocket_connect(f"/v1/ws?token={TEST_TOKEN}") as ws:
+        ws.send_text(json.dumps({"id": "q", "type": "ping", "payload": {}}))
+        assert json.loads(ws.receive_text())["payload"] == {"pong": True}
+
+
+def test_websocket_missing_token_rejected():
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect("/v1/ws"):
+        pass
+
+
+def test_websocket_invalid_token_rejected():
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/v1/ws", headers={"Authorization": "Bearer wrong-token"}),
+    ):
+        pass
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect("/v1/ws?token=wrong-token"):
+        pass
+
+
+def test_auth_missing_token_rejected():
+    r = client.get("/v1/tools")
+    assert r.status_code == 401
+
+
+def test_auth_wrong_token_rejected():
+    r = client.get("/v1/tools", headers={"Authorization": "Bearer wrong-token"})
+    assert r.status_code == 401
+    r2 = client.post(
+        "/v1/tools/calculator/invoke",
+        json={"name": "calculator", "arguments": {"expression": "1+1"}},
+        headers={"Authorization": "wrong-scheme"},
+    )
+    assert r2.status_code == 401
+
+
+def test_auth_unconfigured_returns_503(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("KOTHAGPT_API_TOKEN", raising=False)
+    monkeypatch.setenv("KOTHAGPT_LOCAL_MODE", "false")
+    r = client.get("/v1/tools")
+    assert r.status_code == 503
+
+
+def test_auth_local_mode_allows_without_token(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("KOTHAGPT_API_TOKEN", raising=False)
+    monkeypatch.setenv("KOTHAGPT_LOCAL_MODE", "true")
+    r = client.get("/v1/tools")
+    assert r.status_code == 200

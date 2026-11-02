@@ -3,10 +3,21 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: ai
-      POSTGRES_PASSWORD: ai
+      # POSTGRES_PASSWORD (and POSTGRES_USER/DB) are only honored on first
+      # initialization when postgres_data is empty. Changing POSTGRES_PASSWORD
+      # in .env afterwards does NOT update the existing "ai" role — the
+      # persistent volume keeps the old password and the api will fail to
+      # connect. To rotate without data loss:
+      #   docker compose exec postgres psql -U ai -d ai -c "ALTER ROLE ai WITH PASSWORD 'newpassword';"
+      # then update POSTGRES_PASSWORD/DATABASE_URL in .env (and any deployed
+      # secrets). Only use `docker compose down -v` when the database
+      # contents are disposable — it deletes postgres_data (and qdrant_data).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ai
     ports: ["5432:5432"]
-    volumes: [postgres_data:/var/lib/postgresql/data]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./services/api/migrations:/docker-entrypoint-initdb.d:ro
 
   redis:
     image: redis:7
@@ -22,6 +33,22 @@ services:
     env_file: .env
     ports: ["8000:8000"]
     depends_on: [postgres, redis, qdrant]
+
+  trainer:
+    profiles: [gpu]
+    build: ./services/api
+    working_dir: /workspace
+    command: ["python", "-m", "ml.gpu_verify"]
+    volumes:
+      - ./data/tokenized:/workspace/data/tokenized:ro
+      - ./ml/pretrain/artifacts:/workspace/ml/pretrain/artifacts
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
 volumes:
   postgres_data:

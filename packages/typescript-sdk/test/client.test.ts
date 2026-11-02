@@ -74,7 +74,8 @@ describe("KothaGPT TypeScript SDK", () => {
 
 describe("KothaGPTWebSocket", () => {
   it("chats over websocket", async () => {
-    const ws = new KothaGPTWebSocket(BASE.replace("http", "ws"));
+    const token = process.env.KOTHAGPT_API_TOKEN;
+    const ws = new KothaGPTWebSocket(BASE.replace("http", "ws"), token);
     await ws.connect();
     const completion = await ws.chat([{ role: "user", content: "হ্যালো" }]);
     expect(completion.choices[0].message.content).toBeTruthy();

@@ -53,6 +53,21 @@ make bootstrap
 make test
 ```
 
+Bootstrap works on Linux, macOS, and Windows and previews its steps before
+running them:
+
+```bash
+bash scripts/bootstrap.sh --dry-run                 # preview (auto-detected platform)
+bash scripts/bootstrap.sh --dry-run --platform windows
+make bootstrap                                      # execute without prompt
+pwsh scripts/windows/bootstrap.ps1                  # native PowerShell alternative
+```
+
+Prerequisites: Node.js 18+ (corepack/pnpm). Missing Python, Go, and Rust
+toolchains are installed automatically via the platform package manager
+(apt/dnf/pacman, Homebrew, or winget); already-installed tools are never
+touched. Optional: `scripts/install_rust` for a standalone Rust setup.
+
 Run the API (mock backend) and try the CLI:
 
 ```bash
@@ -62,3 +77,4 @@ kothagpt chat --stream "বাংলায় হ্যালো"
 ```
 
 Training is intentionally disabled by default. Configure a dataset and GPU environment before running training commands.
+

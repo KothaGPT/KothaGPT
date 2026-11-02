@@ -1,0 +1,71 @@
+{
+  "version": "v1",
+  "schema": "InstructionRecord JSONL with record_id/family/split in metadata",
+  "split_policy": "stable SHA-256 ranking within each family; approximately 80% dev and 20% test",
+  "families": {
+    "sft-bn.jsonl": {
+      "records": 4,
+      "split_counts": {
+        "dev": 3,
+        "test": 1
+      },
+      "sha256": "226dd0078eee90536381d2cdf454d448f45d5879e4f0f5c8112fc06d9441a147"
+    },
+    "sft-en.jsonl": {
+      "records": 4,
+      "split_counts": {
+        "dev": 3,
+        "test": 1
+      },
+      "sha256": "b21c9dfc8f27a3a01cc0599b976591b41f6ba6c136caeff38cb770e6389e47d3"
+    },
+    "sft-multilingual.jsonl": {
+      "records": 4,
+      "split_counts": {
+        "dev": 3,
+        "test": 1
+      },
+      "sha256": "f5acd6746c422f3b7999a7d8dbeb5a46de53923fb135f712a7756e78dc7cdf90"
+    },
+    "sft-code.jsonl": {
+      "records": 4,
+      "split_counts": {
+        "dev": 3,
+        "test": 1
+      },
+      "sha256": "8676cebd8ba6fd8fa2966fa6a750b3e9cd8ddf4dcd2d1ac3a8eb52299aa5ac03"
+    },
+    "sft-reasoning.jsonl": {
+      "records": 4,
+      "split_counts": {
+        "dev": 3,
+        "test": 1
+      },
+      "sha256": "bb12aa191c7dd8baf91ec224afab2241367a28534ac81b49cbe76c6e395ebf00"
+    },
+    "sft-conversation.jsonl": {
+      "records": 4,
+      "split_counts": {
+        "dev": 3,
+        "test": 1
+      },
+      "sha256": "9e7fa91fa71d398dd04c2ef079e32ed0ab19850843a079cba1e1965844de2059"
+    },
+    "sft-fc.jsonl": {
+      "records": 4,
+      "split_counts": {
+        "dev": 3,
+        "test": 1
+      },
+      "sha256": "4cee62a32b7f5cb1b96987cccb51851533a6ef101445c046d074dbf4d01eb9ae"
+    },
+    "sft-tool-use.jsonl": {
+      "records": 4,
+      "split_counts": {
+        "dev": 3,
+        "test": 1
+      },
+      "sha256": "91a7fc9522e805f96688d5576923ebbfec703b203423185121dbe00a6950bf19"
+    }
+  }
+}

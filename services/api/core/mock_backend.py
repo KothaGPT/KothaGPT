@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 import hashlib
 import math
+import operator
 import re
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, MutableMapping
 from datetime import UTC
 from typing import Any
+
+# Agent tool registry wired into the API tool surface. Tools registered here
+# (mock built-ins + the sandboxed code execution tool) are exposed via
+# ``/v1/tools/*`` and invokable through the backend contract.
+from services.agents.registry import ToolRegistry, ToolSpec
+from services.agents.tools import default_handler
 
 from ..api.schemas import (
     Agent,
@@ -27,67 +35,112 @@ from ..api.schemas import (
     ToolInvokeResponse,
     Usage,
 )
-from .backend import Backend
+from .agent_store import AgentStore, StoredMapping, create_store_from_env
+from .backend import Backend, BackendCapabilities
 
 _EMBEDDING_DIM = 256
+
+_TOKEN_RE = re.compile(r"[\w\u0980-\u09FF']+")
+
+
+def _mock_tool_specs() -> list[tuple[dict[str, Any], object]]:
+    """Built-in mock tools as (spec_dict, handler) pairs.
+
+    The calculator / current_time / web_search tools preserve the historical
+    mock behaviour; the code execution tool is the sandboxed implementation
+    from ``services/agents/tools``.
+    """
+    specs: list[tuple[dict[str, Any], object]] = [
+        (
+            {
+                "name": "calculator",
+                "description": "Evaluate a basic arithmetic expression.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "expression": {
+                            "type": "string",
+                            "description": "e.g. (2 + 3) * 4",
+                        }
+                    },
+                    "required": ["expression"],
+                },
+                "permission": "read",
+                "enabled": True,
+            },
+            lambda expression: {
+                "expression": expression,
+                "value": _safe_eval(str(expression)),
+            },
+        ),
+        (
+            {
+                "name": "current_time",
+                "description": "Get the current UTC time.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+                "permission": "read",
+                "enabled": True,
+            },
+            lambda: {"utc": _utc_now()},
+        ),
+        (
+            {
+                "name": "web_search",
+                "description": "Search the web (mock).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "max_results": {
+                            "type": "integer",
+                            "default": 5,
+                        },
+                    },
+                    "required": ["query"],
+                },
+                "permission": "read",
+                "enabled": True,
+            },
+            lambda query, max_results=5: {
+                "query": query,
+                "max_results": max_results,
+                "results": [{"title": "Mock result", "snippet": "Deterministic search stub."}],
+            },
+        ),
+    ]
+    # Wire in the sandboxed code execution tool from services/agents.
+    spec_dict, handler = default_handler()
+    specs.append((spec_dict, handler))
+    return specs
+
 
 _MODELS = [
     Model(
         id="kothagpt",
         description="General-purpose Bangla chat model.",
         context_window=8192,
+        status="ready",
     ),
     Model(
         id="kothagpt-small",
         description="Fast Bangla chat model for latency-sensitive apps.",
         context_window=4096,
+        status="ready",
     ),
     Model(
         id="kothagpt-embed",
         description="Bangla text embedding model.",
         context_window=2048,
+        status="ready",
     ),
     Model(
         id="kothagpt-rerank",
         description="Bangla query/document reranking model.",
         context_window=2048,
-    ),
-]
-
-_MOCK_TOOLS = [
-    Tool(
-        function=FunctionDefinition(
-            name="calculator",
-            description="Evaluate a basic arithmetic expression.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "expression": {"type": "string", "description": "e.g. (2 + 3) * 4"},
-                },
-                "required": ["expression"],
-            },
-        )
-    ),
-    Tool(
-        function=FunctionDefinition(
-            name="current_time",
-            description="Get the current UTC time.",
-            parameters={"type": "object", "properties": {}},
-        )
-    ),
-    Tool(
-        function=FunctionDefinition(
-            name="web_search",
-            description="Search the web (mock).",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "max_results": {"type": "integer", "default": 5},
-                },
-                "required": ["query"],
-            },
-        )
+        status="ready",
     ),
 ]
 
@@ -95,12 +148,40 @@ _TOKEN_RE = re.compile(r"[\w\u0980-\u09FF']+")
 
 
 class MockBackend(Backend):
-    """Deterministic, dependency-free backend for development and tests."""
+    """Deterministic, dependency-free backend for development and tests.
 
-    def __init__(self) -> None:
-        self._agents: dict[str, Agent] = {}
-        self._runs: dict[str, AgentRun] = {}
-        self._tools = {t.function.name: t for t in _MOCK_TOOLS}
+    Agent and run state live in an ``AgentStore``: in memory by default, or
+    Redis/PostgreSQL when ``REDIS_URL``/``DATABASE_URL`` is configured so state
+    survives instance restarts on ephemeral hosts (e.g. Vercel functions).
+    """
+
+    capabilities = BackendCapabilities(
+        chat=True,
+        streaming=True,
+        embeddings=True,
+        rerank=True,
+        tools=True,
+        agents=True,
+        websocket=True,
+    )
+
+    def __init__(self, store: AgentStore | None = None) -> None:
+        store = store or create_store_from_env()
+        self._agents: MutableMapping[str, Agent] = StoredMapping(store, "agents", Agent)
+        self._runs: MutableMapping[str, AgentRun] = StoredMapping(store, "runs", AgentRun)
+        self._registry = ToolRegistry()
+        for spec_dict, handler in _mock_tool_specs():
+            self._registry.register(
+                ToolSpec(
+                    name=spec_dict["name"],
+                    description=spec_dict.get("description", ""),
+                    parameters=spec_dict.get("parameters", {}),
+                    permission=spec_dict.get("permission", "read"),
+                    enabled=spec_dict.get("enabled", True),
+                ),
+                handler,
+            )
+        self._allowed = {spec.name for spec in self._registry.list()}
 
     # ---- models ---------------------------------------------------------
 
@@ -155,16 +236,17 @@ class MockBackend(Backend):
     # ---- embeddings -----------------------------------------------------
 
     def embed(self, model: str, inputs: list[str]) -> EmbeddingResponse:
-        data = [
-            Embedding(index=i, embedding=_embed(text))
-            for i, text in enumerate(inputs)
-        ]
+        data = [Embedding(index=i, embedding=_embed(text)) for i, text in enumerate(inputs)]
         total = sum(_token_count([Message(role="user", content=t)]) for t in inputs)
-        return EmbeddingResponse(model=model, data=data, usage=Usage(prompt_tokens=total, total_tokens=total))
+        return EmbeddingResponse(
+            model=model, data=data, usage=Usage(prompt_tokens=total, total_tokens=total)
+        )
 
     # ---- rerank ---------------------------------------------------------
 
-    def rerank(self, model: str, query: str, documents: list[str], top_n: int | None) -> RerankResponse:
+    def rerank(
+        self, model: str, query: str, documents: list[str], top_n: int | None
+    ) -> RerankResponse:
         scored = [
             RerankResult(index=i, document=doc, relevance_score=_rerank_score(query, doc))
             for i, doc in enumerate(documents)
@@ -177,24 +259,23 @@ class MockBackend(Backend):
     # ---- tools ----------------------------------------------------------
 
     def list_tools(self) -> list[Tool]:
-        return list(self._tools.values())
+        return [
+            Tool(
+                function=FunctionDefinition(
+                    name=spec.name,
+                    description=spec.description,
+                    parameters=spec.parameters,
+                )
+            )
+            for spec in self._registry.list()
+        ]
 
     def invoke_tool(self, name: str, arguments: dict[str, Any]) -> ToolInvokeResponse:
-        if name == "calculator":
-            expression = str(arguments.get("expression", ""))
-            return ToolInvokeResponse(name=name, result={"expression": expression, "value": _safe_eval(expression)})
-        if name == "current_time":
-            return ToolInvokeResponse(name=name, result={"utc": _utc_now()})
-        if name == "web_search":
-            return ToolInvokeResponse(
-                name=name,
-                result={
-                    "query": arguments.get("query"),
-                    "max_results": arguments.get("max_results", 5),
-                    "results": [{"title": "Mock result", "snippet": "Deterministic search stub."}],
-                },
-            )
-        raise KeyError(f"Unknown tool: {name}")
+        try:
+            result = self._registry.invoke(name, arguments, allowed=self._allowed)
+        except KeyError as exc:
+            raise KeyError(f"Unknown tool: {name}") from exc
+        return ToolInvokeResponse(name=name, result=result)
 
     # ---- agents ---------------------------------------------------------
 
@@ -221,7 +302,9 @@ class MockBackend(Backend):
 
     def run_agent(self, agent_id: str, message: str) -> AgentRun:
         agent = self.get_agent(agent_id)
-        system = Message(role="system", content=agent.instructions or "You are a helpful assistant.")
+        system = Message(
+            role="system", content=agent.instructions or "You are a helpful assistant."
+        )
         user = Message(role="user", content=message)
         assistant = Message(role="assistant", content=_mock_reply(message))
         run = AgentRun(
@@ -239,13 +322,28 @@ class MockBackend(Backend):
     async def run_agent_stream(self, agent_id: str, message: str) -> AsyncIterator[dict[str, Any]]:
         agent = self.get_agent(agent_id)
         output = _mock_reply(message)
-        yield {
-            "event": "run.created",
-            "run": {"id": None, "agent_id": agent.id, "status": "running"},
-        }
+        run = AgentRun(
+            agent_id=agent_id,
+            status="running",
+            messages=[
+                Message(
+                    role="system", content=agent.instructions or "You are a helpful assistant."
+                ),
+                Message(role="user", content=message),
+            ],
+        )
+        self._runs[run.id] = run
+        yield {"event": "run.created", "run": run.model_dump()}
         for tok in _split_tokens(output):
             await asyncio.sleep(0.02)
             yield {"event": "run.delta", "delta": tok}
+        run.status = "completed"
+        run.output = output
+        run.messages.append(Message(role="assistant", content=output))
+        import time as _time_mod
+
+        run.updated_at = int(_time_mod.time())
+        self._runs[run.id] = run
         yield {"event": "run.completed", "output": output}
 
 
@@ -255,12 +353,50 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+_BINARY_OPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Pow: operator.pow,
+    ast.Mod: operator.mod,
+}
+_UNARY_OPS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
+
 def _safe_eval(expression: str) -> float | str:
-    expr = expression.replace("^", "**")
+    if len(expression) > 200:
+        return "error: expression too long"
     try:
-        return eval(expr, {"__builtins__": {}}, {})
-    except Exception as exc:  # noqa: BLE001
+        tree = ast.parse(expression.replace("^", "**"), mode="eval")
+        value = _eval_node(tree.body, depth=0)
+        if not math.isfinite(float(value)) or abs(value) > 1_000_000_000:
+            return "error: result out of bounds"
+        return value
+    except (ArithmeticError, SyntaxError, ValueError, TypeError) as exc:
         return f"error: {exc}"
+
+
+def _eval_node(node: ast.AST, depth: int) -> int | float:
+    if depth > 20:
+        raise ValueError("expression too deep")
+    if (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, (int, float))
+        and not isinstance(node.value, bool)
+    ):
+        if abs(node.value) > 1_000_000:
+            raise ValueError("number out of bounds")
+        return node.value
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
+        return _UNARY_OPS[type(node.op)](_eval_node(node.operand, depth + 1))
+    if isinstance(node, ast.BinOp) and type(node.op) in _BINARY_OPS:
+        left = _eval_node(node.left, depth + 1)
+        right = _eval_node(node.right, depth + 1)
+        if isinstance(node.op, ast.Pow) and abs(right) > 12:
+            raise ValueError("exponent out of bounds")
+        return _BINARY_OPS[type(node.op)](left, right)
+    raise ValueError("unsupported expression")
 
 
 def _token_count(messages: list[Message]) -> int:
@@ -298,7 +434,7 @@ def _rerank_score(query: str, doc: str) -> float:
     overlap = len(q_tokens & d_tokens) / math.sqrt(len(q_tokens) * len(d_tokens))
     ngram_bonus = 0.0
     for n in (2, 3):
-        q_ngrams = {doc[i : i + n] for i in range(len(query) - n + 1)}
+        q_ngrams = {query[i : i + n] for i in range(len(query) - n + 1)}
         d_ngrams = {doc[i : i + n] for i in range(len(doc) - n + 1)}
         if q_ngrams:
             ngram_bonus += len(q_ngrams & d_ngrams) / len(q_ngrams)

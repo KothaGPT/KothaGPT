@@ -6,6 +6,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
+from data.manifest import DatasetRegistry, get_registry
 from data.pipeline import (
     copyright,
     dedup,
@@ -19,7 +20,7 @@ from data.pipeline import (
     version,
 )
 
-__all__ = ["PipelineConfig", "run_pipeline"]
+__all__ = ["PipelineConfig", "enforce_source_provenance", "run_pipeline"]
 
 
 @dataclass
@@ -77,10 +78,17 @@ class PipelineConfig:
 
     # Split
     validation_ratio: float = 0.02
+    test_ratio: float = 0.01
 
     # Shards
     shard_size: int = 100_000
     gzip_output: bool = True
+
+    # Provenance / source registry
+    strict: bool = True
+    """Production mode (default): fail closed when the source registry is empty,
+    a record's source is unregistered, or a license is missing/disallowed.
+    Set ``strict=False`` to opt into the permissive development bypass."""
 
     # Reporting
     sample_note: str | None = None
@@ -89,7 +97,52 @@ class PipelineConfig:
         return dataclasses.asdict(self)
 
 
-def run_pipeline(cfg: PipelineConfig) -> dict:
+def enforce_source_provenance(
+    records: list[dict],
+    registry: DatasetRegistry | None = None,
+    *,
+    strict: bool = True,
+) -> tuple[list[dict], list[str]]:
+    """Filter records to those whose ``source`` is registered and allowed.
+
+    Returns ``(kept, rejected_reasons)``.
+
+    Production mode (``strict=True``, the default) fails closed:
+      * an empty registry rejects every record (provenance required);
+      * a record without a ``source`` field is rejected;
+      * an unregistered or disallowed source is rejected.
+
+    Development bypass (``strict=False``) is an explicit opt-in: every record is
+    allowed through with no provenance check, regardless of registry state.
+    """
+    registry = registry or get_registry()
+    if not strict:
+        # Explicit development bypass: allow all records, no provenance check.
+        return records, []
+    if not registry.list():
+        rejected = [
+            f"{r.get('id', '?')}: no sources registered (provenance required in production mode)"
+            for r in records
+        ]
+        return [], rejected
+    kept: list[dict] = []
+    rejected: list[str] = []
+    for record in records:
+        source = record.get("source")
+        if not source:
+            rejected.append(
+                f"{record.get('id', '?')}: record missing 'source' field (no provenance)"
+            )
+            continue
+        ok, reason = registry.is_allowed(source)
+        if not ok:
+            rejected.append(f"{source}: {reason}")
+            continue
+        kept.append(record)
+    return kept, rejected
+
+
+def run_pipeline(cfg: PipelineConfig, registry: DatasetRegistry | None = None) -> dict:
     """Execute raw -> normalize -> filter -> dedup -> split -> version.
 
     Returns a summary dict with per-step counts and the emitted version.
@@ -108,9 +161,21 @@ def run_pipeline(cfg: PipelineConfig) -> dict:
         frozenset(cfg.license_allowlist) if cfg.license_allowlist else copyright.DEFAULT_ALLOWLIST
     )
 
+    # 0. Provenance gate (KGPT-003): reject records whose source is not
+    # registered and allowed. Production mode (strict=True, the default) fails
+    # closed when the registry is empty or a source is unregistered/disallowed;
+    # strict=False is an explicit development bypass.
+    registry = registry or get_registry()
+    provenance_rejected: list[str] = []
+
     # 1. Read raw records.
     records = list(io.iter_records(source))
     summary["raw"] = len(records)
+    records, provenance_rejected = enforce_source_provenance(
+        records, registry, strict=cfg.strict
+    )
+    summary["after_provenance"] = len(records)
+    summary["provenance_rejected"] = provenance_rejected
 
     # 2. Normalize.
     normalized = []
@@ -131,7 +196,7 @@ def run_pipeline(cfg: PipelineConfig) -> dict:
     # 3. Copyright / licensing gate.
     licensed = []
     for record in normalized:
-        keep, reasons = copyright.copyright_gate(
+        keep, _ = copyright.copyright_gate(
             record,
             license_map=license_map,
             allowlist=license_allowlist,
@@ -154,7 +219,7 @@ def run_pipeline(cfg: PipelineConfig) -> dict:
                 record = dict(record)
                 record["text"] = text
             pii_allowed = True  # PII already handled by masking
-        keep, reasons = quality.quality_filter(
+        keep, _ = quality.quality_filter(
             text,
             min_chars=cfg.min_chars,
             max_chars=cfg.max_chars,
@@ -179,9 +244,7 @@ def run_pipeline(cfg: PipelineConfig) -> dict:
 
     # 6. Toxic-content filter.
     safe = []
-    toxic_classifier = (
-        toxic.load_classifier(cfg.toxic_classifier) if cfg.toxic_classifier else None
-    )
+    toxic_classifier = toxic.load_classifier(cfg.toxic_classifier) if cfg.toxic_classifier else None
     for record in clean:
         if cfg.check_toxic:
             keep, _toxic_reasons = toxic.toxic_gate(
@@ -200,9 +263,7 @@ def run_pipeline(cfg: PipelineConfig) -> dict:
             cfg.dedup_state_path
         )
     elif cfg.dedup_bloom:
-        exact_store = dedup.BloomFilter(
-            cfg.dedup_bloom_capacity, fp_rate=cfg.dedup_bloom_fp_rate
-        )
+        exact_store = dedup.BloomFilter(cfg.dedup_bloom_capacity, fp_rate=cfg.dedup_bloom_fp_rate)
     else:
         exact_store = set()
     deduped, dedup_counts = dedup.deduplicate_with_stats(
@@ -218,10 +279,16 @@ def run_pipeline(cfg: PipelineConfig) -> dict:
     summary["after_dedup"] = len(deduped)
     summary["dedup"] = dedup_counts
 
-    # 8. Deterministic train/validation split.
-    split_records = [split.split_record(r, validation_ratio=cfg.validation_ratio) for r in deduped]
+    # 8. Deterministic source/domain-stratified split.
+    split_records = split.split_records(
+        deduped,
+        validation_ratio=cfg.validation_ratio,
+        test_ratio=cfg.test_ratio,
+    )
+    split.assert_no_split_contamination(split_records)
     summary["train"] = sum(1 for r in split_records if r["split"] == "train")
     summary["validation"] = sum(1 for r in split_records if r["split"] == "validation")
+    summary["test"] = sum(1 for r in split_records if r["split"] == "test")
 
     # 9. Statistics report.
     stats_data = stats.compute_stats(iter(split_records))
@@ -259,12 +326,23 @@ def run_pipeline(cfg: PipelineConfig) -> dict:
         shard_size=cfg.shard_size,
         gzip_output=cfg.gzip_output,
     )
+    test_shards: list[dict] = []
     version_obj.shards = train_shards + val_shards
     version_obj.files = {
         "train_dir": str(train_dir.relative_to(out_root)),
         "validation_dir": str(val_dir.relative_to(out_root)),
         "report_dir": str((version_dir / "report").relative_to(out_root)),
     }
+    if cfg.test_ratio > 0:
+        test_dir = version_dir / "test"
+        test_shards = io.write_shards(
+            (r for r in split_records if r["split"] == "test"),
+            test_dir,
+            shard_size=cfg.shard_size,
+            gzip_output=cfg.gzip_output,
+        )
+        version_obj.shards += test_shards
+        version_obj.files["test_dir"] = str(test_dir.relative_to(out_root))
     version_obj.config = cfg_dict
 
     manifest_path = version.write_manifest(version_obj, version_dir)
@@ -272,4 +350,5 @@ def run_pipeline(cfg: PipelineConfig) -> dict:
     summary["manifest"] = str(manifest_path)
     summary["train_shards"] = train_shards
     summary["validation_shards"] = val_shards
+    summary["test_shards"] = test_shards
     return summary

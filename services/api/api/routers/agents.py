@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ...core import backend_factory
+from ...core.agent_runner import run_agent_with_loop
+from ..auth import require_api_token
+from ..backend import get_active_backend
 from ..schemas import Agent, AgentRun, AgentRunRequest, AgentSpec
 
-router = APIRouter(prefix="/v1/agents", tags=["agents"])
+router = APIRouter(
+    prefix="/v1/agents",
+    tags=["agents"],
+    dependencies=[Depends(require_api_token)],
+)
 
 
 class AgentList(BaseModel):
@@ -19,19 +25,19 @@ class AgentList(BaseModel):
 
 @router.get("", response_model=AgentList)
 def list_agents() -> AgentList:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     return AgentList(data=backend.list_agents())
 
 
 @router.post("", response_model=Agent, status_code=201)
 def create_agent(spec: AgentSpec) -> Agent:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     return backend.create_agent(spec)
 
 
 @router.get("/{agent_id}", response_model=Agent)
 def get_agent(agent_id: str) -> Agent:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     try:
         return backend.get_agent(agent_id)
     except KeyError as exc:
@@ -40,7 +46,7 @@ def get_agent(agent_id: str) -> Agent:
 
 @router.delete("/{agent_id}", status_code=204)
 def delete_agent(agent_id: str) -> None:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     try:
         backend.delete_agent(agent_id)
     except KeyError as exc:
@@ -49,13 +55,20 @@ def delete_agent(agent_id: str) -> None:
 
 @router.post("/{agent_id}/runs", response_model=AgentRun, status_code=201)
 def run_agent(agent_id: str, request: AgentRunRequest) -> AgentRun:
-    backend = backend_factory.create()
-    return backend.run_agent(agent_id, request.message)
+    backend = get_active_backend("agents")
+    try:
+        agent = backend.get_agent(agent_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    run = run_agent_with_loop(agent_id, request.message, agent, backend)
+    backend._runs[run.id] = run
+    return run
 
 
 @router.post("/{agent_id}/runs/stream")
 async def stream_agent(agent_id: str, request: AgentRunRequest) -> StreamingResponse:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     return StreamingResponse(
         _agent_sse(backend.run_agent_stream(agent_id, request.message)),
         media_type="text/event-stream",
@@ -65,7 +78,7 @@ async def stream_agent(agent_id: str, request: AgentRunRequest) -> StreamingResp
 
 @router.get("/{agent_id}/runs/{run_id}", response_model=AgentRun)
 def get_run(agent_id: str, run_id: str) -> AgentRun:
-    backend = backend_factory.create()
+    backend = get_active_backend("agents")
     try:
         run = backend.get_run(run_id)
     except KeyError as exc:

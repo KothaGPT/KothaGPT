@@ -21,30 +21,30 @@ __all__ = [
 
 # Standalone vowel forms (word-initial or after a non-consonant).
 _BENGALI_VOWELS = {
-    "a": "\u0986",   # আ
+    "a": "\u0986",  # আ
     "aa": "\u0986",
-    "i": "\u0987",   # ই
+    "i": "\u0987",  # ই
     "ii": "\u0988",  # ঈ
-    "u": "\u0989",   # উ
+    "u": "\u0989",  # উ
     "uu": "\u098a",  # ঊ
-    "e": "\u098f",   # এ
+    "e": "\u098f",  # এ
     "oi": "\u0990",  # ঐ
-    "o": "\u0985",   # অ
+    "o": "\u0985",  # অ
     "ou": "\u0994",  # ঔ
     "rri": "\u098b",  # ঋ
 }
 
 # Matra (vowel sign) forms, used after a consonant.
 _VOWEL_MATRAS = {
-    "a": "\u09be",   # া
+    "a": "\u09be",  # া
     "aa": "\u09be",
-    "i": "\u09bf",   # ি
+    "i": "\u09bf",  # ি
     "ii": "\u09c0",  # ী
-    "u": "\u09c1",   # ু
+    "u": "\u09c1",  # ু
     "uu": "\u09c2",  # ূ
-    "e": "\u09c7",   # ে
+    "e": "\u09c7",  # ে
     "oi": "\u09c8",  # ৈ
-    "o": "\u09cb",   # ো
+    "o": "\u09cb",  # ো
     "ou": "\u09cc",  # ৌ
     "rri": "\u09c3",  # ৃ
 }
@@ -54,58 +54,56 @@ _VOWEL_MATRAS = {
 # forms map to the retroflex series (ট, ড, ণ, ঠ ...) per ISO-15919-ish style.
 _BENGALI_CONSONANTS = {
     "chh": "\u099b",  # ছ
-    "kh": "\u0996",   # খ
-    "gh": "\u0998",   # ঘ
-    "ng": "\u0982",   # ং (anusvara; the common romanized "ng")
-    "jh": "\u099d",   # ঝ
-    "Th": "\u09a0",   # ঠ
-    "th": "\u09a5",   # থ
-    "Dh": "\u09a2",   # ঢ
-    "dh": "\u09a7",   # ধ
-    "ph": "\u09ab",   # ফ
-    "bh": "\u09ad",   # ভ
-    "sh": "\u09b6",   # শ
-    "Rh": "\u09dd",   # ঢ়
-    "ch": "\u099a",   # চ (before "c")
-    "c": "\u099a",    # চ
-    "k": "\u0995",    # ক
-    "g": "\u0997",    # গ
-    "j": "\u099c",    # জ
-    "z": "\u09af",    # য (generic z -> য)
-    "T": "\u099f",    # ট
-    "t": "\u09a4",    # ত
-    "D": "\u09a1",    # ড
-    "d": "\u09a6",    # দ
-    "N": "\u09a3",    # ণ
-    "n": "\u09a8",    # ন
-    "p": "\u09aa",    # প
-    "f": "\u09ab",    # ফ
-    "b": "\u09ac",    # ব
-    "v": "\u09ad",    # ভ (generic v)
-    "m": "\u09ae",    # ম
-    "R": "\u09dc",    # ড়
-    "r": "\u09b0",    # র
-    "l": "\u09b2",    # ল
-    "S": "\u09b7",    # ষ
-    "s": "\u09b8",    # স
-    "h": "\u09b9",    # হ
-    "Y": "\u09df",    # য়
-    "y": "\u09af",    # য
-    "q": "\u0995",    # q -> ক (loanword assist)
+    "kh": "\u0996",  # খ
+    "gh": "\u0998",  # ঘ
+    "ng": "\u0982",  # ং (anusvara; the common romanized "ng")
+    "jh": "\u099d",  # ঝ
+    "Th": "\u09a0",  # ঠ
+    "th": "\u09a5",  # থ
+    "Dh": "\u09a2",  # ঢ
+    "dh": "\u09a7",  # ধ
+    "ph": "\u09ab",  # ফ
+    "bh": "\u09ad",  # ভ
+    "sh": "\u09b6",  # শ
+    "Rh": "\u09dd",  # ঢ়
+    "ch": "\u099a",  # চ (before "c")
+    "c": "\u099a",  # চ
+    "k": "\u0995",  # ক
+    "g": "\u0997",  # গ
+    "j": "\u099c",  # জ
+    "z": "\u09af",  # য (generic z -> য)
+    "T": "\u099f",  # ট
+    "t": "\u09a4",  # ত
+    "D": "\u09a1",  # ড
+    "d": "\u09a6",  # দ
+    "N": "\u09a3",  # ণ
+    "n": "\u09a8",  # ন
+    "p": "\u09aa",  # প
+    "f": "\u09ab",  # ফ
+    "b": "\u09ac",  # ব
+    "v": "\u09ad",  # ভ (generic v)
+    "m": "\u09ae",  # ম
+    "R": "\u09dc",  # ড়
+    "r": "\u09b0",  # র
+    "l": "\u09b2",  # ল
+    "S": "\u09b7",  # ষ
+    "s": "\u09b8",  # স
+    "h": "\u09b9",  # হ
+    "Y": "\u09df",  # য়
+    "y": "\u09af",  # য
+    "q": "\u0995",  # q -> ক (loanword assist)
     "x": "\u0995\u09cd\u09b7",  # x -> ক্ষ
 }
 
 _HASANTA = "\u09cd"  # ্
-_ZWNJ = "\u200c"     # used in conjuncts to separate merged letters
+_ZWNJ = "\u200c"  # used in conjuncts to separate merged letters
 
 # Signs that are matched via the consonant table but are not base consonants:
 # they must not trigger a hasanta on the following letter.
 _SIGN_GLYPHS = frozenset("\u0982\u0983\u0981")  # ং ঃ ঁ
 
 _CONSONANT_KEYS = sorted(_BENGALI_CONSONANTS, key=len, reverse=True)
-_VOWEL_KEYS = sorted(
-    set(_BENGALI_VOWELS) | set(_VOWEL_MATRAS), key=len, reverse=True
-)
+_VOWEL_KEYS = sorted(set(_BENGALI_VOWELS) | set(_VOWEL_MATRAS), key=len, reverse=True)
 
 
 def _match_table(text: str, i: int, table: dict, keys: list[str]) -> tuple[str, str] | None:
@@ -173,26 +171,72 @@ def latin_to_bangla(text: str) -> str:
 # --- Bangla -> Latin -------------------------------------------------------
 
 _LATIN_VOWELS = {
-    "\u0985": "o", "\u0986": "a", "\u0987": "i", "\u0988": "i",
-    "\u0989": "u", "\u098a": "u", "\u098f": "e", "\u0990": "oi",
-    "\u0993": "o", "\u0994": "ou", "\u098b": "ri",
+    "\u0985": "o",
+    "\u0986": "a",
+    "\u0987": "i",
+    "\u0988": "i",
+    "\u0989": "u",
+    "\u098a": "u",
+    "\u098f": "e",
+    "\u0990": "oi",
+    "\u0993": "o",
+    "\u0994": "ou",
+    "\u098b": "ri",
 }
 _LATIN_MATRAS = {
-    "\u09be": "a", "\u09bf": "i", "\u09c0": "i", "\u09c1": "u", "\u09c2": "u",
-    "\u09c7": "e", "\u09c8": "oi", "\u09cb": "o", "\u09cc": "ou", "\u09c3": "ri",
+    "\u09be": "a",
+    "\u09bf": "i",
+    "\u09c0": "i",
+    "\u09c1": "u",
+    "\u09c2": "u",
+    "\u09c7": "e",
+    "\u09c8": "oi",
+    "\u09cb": "o",
+    "\u09cc": "ou",
+    "\u09c3": "ri",
 }
 _LATIN_CONSONANTS = {
-    "\u0995": "k", "\u0996": "kh", "\u0997": "g", "\u0998": "gh", "\u0999": "ng",
-    "\u099a": "c", "\u099b": "chh", "\u099c": "j", "\u099d": "jh", "\u099e": "ng",
-    "\u099f": "t", "\u09a0": "th", "\u09a1": "d", "\u09a2": "dh", "\u09a3": "n",
-    "\u09a4": "t", "\u09a5": "th", "\u09a6": "d", "\u09a7": "dh", "\u09a8": "n",
-    "\u09aa": "p", "\u09ab": "ph", "\u09ac": "b", "\u09ad": "bh", "\u09ae": "m",
-    "\u09af": "j", "\u09b0": "r", "\u09b2": "l", "\u09b6": "sh", "\u09b7": "sh",
-    "\u09b8": "s", "\u09b9": "h", "\u09dc": "r", "\u09dd": "rh", "\u09df": "y",
+    "\u0995": "k",
+    "\u0996": "kh",
+    "\u0997": "g",
+    "\u0998": "gh",
+    "\u0999": "ng",
+    "\u099a": "c",
+    "\u099b": "chh",
+    "\u099c": "j",
+    "\u099d": "jh",
+    "\u099e": "ng",
+    "\u099f": "t",
+    "\u09a0": "th",
+    "\u09a1": "d",
+    "\u09a2": "dh",
+    "\u09a3": "n",
+    "\u09a4": "t",
+    "\u09a5": "th",
+    "\u09a6": "d",
+    "\u09a7": "dh",
+    "\u09a8": "n",
+    "\u09aa": "p",
+    "\u09ab": "ph",
+    "\u09ac": "b",
+    "\u09ad": "bh",
+    "\u09ae": "m",
+    "\u09af": "j",
+    "\u09b0": "r",
+    "\u09b2": "l",
+    "\u09b6": "sh",
+    "\u09b7": "sh",
+    "\u09b8": "s",
+    "\u09b9": "h",
+    "\u09dc": "r",
+    "\u09dd": "rh",
+    "\u09df": "y",
     "\u09ce": "t",
 }
 _LATIN_SIGNS = {
-    "\u0982": "ng", "\u0983": "h", "\u0981": "n",  # ং ঃ ঁ
+    "\u0982": "ng",
+    "\u0983": "h",
+    "\u0981": "n",  # ং ঃ ঁ
 }
 
 

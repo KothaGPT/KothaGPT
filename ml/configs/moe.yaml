@@ -1,0 +1,38 @@
+model:
+  architecture: decoder_transformer
+  vocab_size: 50000
+  hidden_size: 2048
+  num_layers: 24
+  num_heads: 16
+  max_position_embeddings: 8192
+  rms_norm_eps: 1e-5
+  rope_theta: 500000.0
+  num_experts: 8
+  active_experts: 2
+  expert_capacity_factor: 1.25
+  tie_word_embeddings: true
+
+training:
+  batch_size: 2
+  gradient_accumulation_steps: 16
+  learning_rate: 1.5e-4
+  max_steps: 2000
+  warmup_steps: 200
+  min_lr: 1.5e-5
+  lr_schedule: cosine
+  mixed_precision: bf16
+  auxiliary_loss_weight: 0.01
+  capacity_warmup_steps: 100
+
+data:
+  train: data/processed/train
+  validation: data/processed/validation
+
+tier:
+  name: medium
+  context_window: 8192
+  device_profile: gpu
+  quant_level: int8
+  cost_per_1k_tokens: 0.01
+  target_latency_p95_ms: 1200
+  moe: true

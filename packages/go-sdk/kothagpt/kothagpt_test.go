@@ -186,7 +186,7 @@ func TestAgentStream(t *testing.T) {
 func TestWebSocket(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	ws, err := DialWebSocket(ctx, baseURL)
+	ws, err := DialWebSocket(ctx, baseURL, os.Getenv("KOTHAGPT_API_TOKEN"))
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

@@ -1,41 +1,29 @@
 import asyncio
-import subprocess
-import time
 
-import httpx
 import pytest
 from kothagpt import AsyncKothaGPT, KothaGPT
 from kothagpt.websocket import WebSocketClient
 
 
 @pytest.fixture(scope="module")
-def server():
-    proc = subprocess.Popen(
-        ["/Users/khulnasoft/Development/KothaGPT/.venv/bin/python", "-m", "uvicorn", "services.api.app:app", "--port", "8011"],
-        cwd="/Users/khulnasoft/Development/KothaGPT",
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    for _ in range(50):
-        try:
-            httpx.get("http://localhost:8011/health")
-            break
-        except httpx.HTTPError:
-            time.sleep(0.2)
-    yield "http://localhost:8011"
-    proc.terminate()
-    proc.wait(timeout=10)
-
-
-@pytest.fixture(scope="module")
 def client(server):
-    with KothaGPT(base_url=server) as c:
+    from tests.conftest import API_TEST_TOKEN
+
+    with KothaGPT(base_url=server, api_key=API_TEST_TOKEN) as c:
         yield c
 
 
 def test_list_models(client):
     models = client.models.list()
-    assert [m.id for m in models] == ["kothagpt", "kothagpt-small", "kothagpt-embed", "kothagpt-rerank"]
+    assert [m.id for m in models] == [
+        "kothagpt-nano",
+        "kothagpt-small",
+        "kothagpt-medium",
+        "kothagpt-large",
+        "kothagpt",
+        "kothagpt-embed",
+        "kothagpt-rerank",
+    ]
 
 
 def test_chat(client):
@@ -98,8 +86,10 @@ def test_errors(client):
 
 
 def test_async_client(server):
+    from tests.conftest import API_TEST_TOKEN
+
     async def main():
-        async with AsyncKothaGPT(base_url=server) as c:
+        async with AsyncKothaGPT(base_url=server, api_key=API_TEST_TOKEN) as c:
             resp = await c.chat.create(messages=[{"role": "user", "content": "হাই"}])
             assert resp.text
             emb = await c.embeddings.create("বাংলা")
@@ -116,9 +106,11 @@ def test_async_client(server):
 
 
 def test_websocket(server):
+    from tests.conftest import API_TEST_TOKEN
+
     async def main():
         ws_url = server.replace("http", "ws")
-        async with WebSocketClient(base_url=ws_url) as ws:
+        async with WebSocketClient(base_url=ws_url, api_key=API_TEST_TOKEN) as ws:
             completion = await ws.chat([{"role": "user", "content": "হ্যালো"}])
             assert completion.text
             emb = await ws.embed("বাংলা")

@@ -44,7 +44,9 @@ def test_bloom_filter_validation():
 
 def test_bloom_filter_as_exact_store():
     docs = [{"text": "same"}, {"text": "same"}, {"text": "other"}]
-    out, counts = dedup.deduplicate_with_stats(docs, exact=True, exact_store=dedup.BloomFilter(100, 0.001))
+    out, counts = dedup.deduplicate_with_stats(
+        docs, exact=True, exact_store=dedup.BloomFilter(100, 0.001)
+    )
     assert len(out) == 2
     assert counts["removed_exact"] == 1
 
@@ -111,7 +113,9 @@ def test_near_sharded_matches_in_memory_behavior():
 
 def test_sharded_validation():
     try:
-        dedup.near_duplicate_groups_sharded([{"text": "x"}], num_hashes=10, num_bands=3, rows_per_band=4)
+        dedup.near_duplicate_groups_sharded(
+            [{"text": "x"}], num_hashes=10, num_bands=3, rows_per_band=4
+        )
     except ValueError:
         pass
     else:
@@ -131,6 +135,7 @@ def test_dedup_counts_reported(tmp_path):
         max_chars=10**6,
         min_words=1,
         require_bangla=False,
+        strict=False,  # dev bypass: no source registry configured in this test
     )
     summary = run_pipeline(cfg)
     assert summary["dedup"]["removed_exact"] == 1
@@ -151,6 +156,7 @@ def test_cross_source_dedup_via_pipeline(tmp_path):
         min_words=1,
         require_bangla=False,
         dedup_state_path=str(state),
+        strict=False,  # dev bypass: no source registry configured in this test
     )
     summary_a = run_pipeline(cfg_a)
     assert summary_a["after_dedup"] == 1
@@ -167,6 +173,7 @@ def test_cross_source_dedup_via_pipeline(tmp_path):
         min_words=1,
         require_bangla=False,
         dedup_state_path=str(state),
+        strict=False,  # dev bypass: no source registry configured in this test
     )
     summary_b = run_pipeline(cfg_b)
     assert summary_b["after_dedup"] == 1  # duplicate from source A dropped

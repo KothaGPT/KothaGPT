@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import heapq
 from collections import Counter, defaultdict
-from typing import Any, Callable
+from collections.abc import Callable
+from itertools import pairwise
+from typing import Any
 
-from .base import BOOTSTRAP_CHARS, SPECIAL_TOKENS, UNK, BaseTokenizer, _WORD_MARKER
+from .base import _WORD_MARKER, BOOTSTRAP_CHARS, SPECIAL_TOKENS, UNK, BaseTokenizer
 
 __all__ = ["BpeTokenizer", "train_bpe"]
 
@@ -37,7 +39,7 @@ def train_bpe(
     *,
     min_frequency: int = 2,
     log: Callable[[str], None] | None = None,
-) -> "BpeTokenizer":
+) -> BpeTokenizer:
     """Train a BPE tokenizer from a list of texts."""
     if vocab_size <= len(SPECIAL_TOKENS):
         raise ValueError(f"vocab_size must exceed {len(SPECIAL_TOKENS)} special tokens")
@@ -53,7 +55,7 @@ def train_bpe(
     pair_to_words: dict[tuple[str, str], set[str]] = defaultdict(set)
     for word, sym in symbols.items():
         cnt = word_counts[word]
-        for pair in zip(sym, sym[1:]):
+        for pair in pairwise(sym):
             pair_counts[pair] += cnt
             pair_to_words[pair].add(word)
 
@@ -92,7 +94,7 @@ def train_bpe(
         for word in list(pair_to_words.get(best, ())):
             sym = symbols[word]
             wcnt = word_counts[word]
-            old_pairs = Counter(zip(sym, sym[1:]))
+            old_pairs = Counter(pairwise(sym))
             new_sym = _merge_all(sym, a, b, merged)
             symbols[word] = new_sym
             for pair, multiplicity in old_pairs.items():
@@ -100,13 +102,17 @@ def train_bpe(
                 pair_to_words[pair].discard(word)
                 if pair_counts[pair] <= 0:
                     del pair_counts[pair]
+                    pair_to_words.pop(pair, None)
                 else:
                     heapq.heappush(heap, (-pair_counts[pair], pair))
-            new_pairs = Counter(zip(new_sym, new_sym[1:]))
+            new_pairs = Counter(pairwise(new_sym))
             for pair, multiplicity in new_pairs.items():
                 pair_counts[pair] += wcnt * multiplicity
                 pair_to_words[pair].add(word)
                 heapq.heappush(heap, (-pair_counts[pair], pair))
+        if len(heap) > 8 * max(len(pair_counts), 1):
+            heap = [(-cnt, pair) for pair, cnt in pair_counts.items()]
+            heapq.heapify(heap)
         if log is not None and len(merges) % 1000 == 0:
             log(f"bpe: {len(merges)} merges, vocab={len(vocab)}")
 
@@ -134,7 +140,7 @@ class BpeTokenizer(BaseTokenizer):
         while True:
             best_pair: tuple[str, str] | None = None
             best_rank = len(self.merges)
-            for pair in zip(tokens, tokens[1:]):
+            for pair in pairwise(tokens):
                 rank = self.bpe_ranks.get(pair)
                 if rank is not None and rank < best_rank:
                     best_rank = rank
@@ -152,7 +158,7 @@ class BpeTokenizer(BaseTokenizer):
         return data
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "BpeTokenizer":
+    def from_dict(cls, data: dict[str, Any]) -> BpeTokenizer:
         vocab = data["vocab"]
         merges = [tuple(pair) for pair in data.get("merges", [])]
         if UNK not in vocab:

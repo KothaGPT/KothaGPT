@@ -42,7 +42,26 @@ struct EnvelopeReply {
 impl WebSocketClient {
     /// Connects to the `/v1/ws` endpoint of `base_url` (e.g. `ws://localhost:8000`).
     pub async fn connect(base_url: &str) -> Result<Self> {
-        let ws_url = format!("{}/v1/ws", base_url.trim_end_matches('/'));
+        Self::connect_with_api_key(base_url, None).await
+    }
+
+    /// Connects to `/v1/ws` with an optional API token (sent as `?token=` query
+    /// param for browser-style handshakes; the server also accepts the
+    /// `Authorization: Bearer` header).
+    pub async fn connect_with_api_key(base_url: &str, api_key: Option<&str>) -> Result<Self> {
+        let mut ws_url = format!("{}/v1/ws", base_url.trim_end_matches('/'));
+        if let Some(key) = api_key.and_then(|k| {
+            let t = k.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t)
+            }
+        }) {
+            let mut url = url::Url::parse(&ws_url).map_err(|e| Error::Other(e.to_string()))?;
+            url.query_pairs_mut().append_pair("token", key);
+            ws_url = url.to_string();
+        }
         let (ws, _) = connect_async(ws_url).await?;
         let (write, read) = ws.split();
         Ok(WebSocketClient { write, read })

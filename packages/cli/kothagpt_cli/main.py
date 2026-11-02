@@ -130,8 +130,14 @@ def cmd_agents_run(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kothagpt", description="Kotha GPT CLI")
-    parser.add_argument("--version", action="version", version=f"kothagpt {CLI_VERSION} (sdk {sdk_version})")
-    parser.add_argument("--api-url", default=None, help="API base URL (default: $KOTHAGPT_API_URL or http://localhost:8000)")
+    parser.add_argument(
+        "--version", action="version", version=f"kothagpt {CLI_VERSION} (sdk {sdk_version})"
+    )
+    parser.add_argument(
+        "--api-url",
+        default=None,
+        help="API base URL (default: $KOTHAGPT_API_URL or http://localhost:8000)",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("models", help="List available models")

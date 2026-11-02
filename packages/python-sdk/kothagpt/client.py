@@ -164,7 +164,9 @@ class Embeddings:
     def __init__(self, client: BaseKothaGPT) -> None:
         self._client = client
 
-    def create(self, input: str | list[str], *, model: str = "kothagpt-embed") -> types.EmbeddingResponse:
+    def create(
+        self, input: str | list[str], *, model: str = "kothagpt-embed"
+    ) -> types.EmbeddingResponse:
         response = self._client._post("/v1/embeddings", {"model": model, "input": input})  # type: ignore[attr-defined]
         return types.EmbeddingResponse.model_validate(response.json())
 
@@ -205,7 +207,9 @@ class Tools:
         return [types.Tool.model_validate(t) for t in response.json()["data"]]
 
     def invoke(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
-        response = self._client._post(f"/v1/tools/{name}/invoke", {"name": name, "arguments": arguments or {}})  # type: ignore[attr-defined]
+        response = self._client._post(
+            f"/v1/tools/{name}/invoke", {"name": name, "arguments": arguments or {}}
+        )  # type: ignore[attr-defined]
         return response.json()["result"]
 
 
@@ -234,7 +238,9 @@ class Agents:
         return types.AgentRun.model_validate(response.json())
 
     def stream(self, agent_id: str, message: str) -> Iterator[dict[str, Any]]:
-        with self._client._stream(f"/v1/agents/{agent_id}/runs/stream", {"message": message}) as response:  # type: ignore[attr-defined]
+        with self._client._stream(
+            f"/v1/agents/{agent_id}/runs/stream", {"message": message}
+        ) as response:  # type: ignore[attr-defined]
             raise_for_status(response)
             for data in _sse_lines(response):
                 yield json.loads(data)
@@ -301,7 +307,9 @@ class AsyncEmbeddings:
     def __init__(self, client: BaseKothaGPT) -> None:
         self._client = client
 
-    async def create(self, input: str | list[str], *, model: str = "kothagpt-embed") -> types.EmbeddingResponse:
+    async def create(
+        self, input: str | list[str], *, model: str = "kothagpt-embed"
+    ) -> types.EmbeddingResponse:
         response = await self._client._post("/v1/embeddings", {"model": model, "input": input})  # type: ignore[attr-defined]
         return types.EmbeddingResponse.model_validate(response.json())
 
@@ -342,7 +350,9 @@ class AsyncTools:
         return [types.Tool.model_validate(t) for t in response.json()["data"]]
 
     async def invoke(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
-        response = await self._client._post(f"/v1/tools/{name}/invoke", {"name": name, "arguments": arguments or {}})  # type: ignore[attr-defined]
+        response = await self._client._post(
+            f"/v1/tools/{name}/invoke", {"name": name, "arguments": arguments or {}}
+        )  # type: ignore[attr-defined]
         return response.json()["result"]
 
 
@@ -371,7 +381,9 @@ class AsyncAgents:
         return types.AgentRun.model_validate(response.json())
 
     async def stream(self, agent_id: str, message: str):
-        response = await self._client._stream(f"/v1/agents/{agent_id}/runs/stream", {"message": message})  # type: ignore[attr-defined]
+        response = await self._client._stream(
+            f"/v1/agents/{agent_id}/runs/stream", {"message": message}
+        )  # type: ignore[attr-defined]
         async with response as resp:
             raise_for_status(resp)
             async for data in _aiter_sse(resp):

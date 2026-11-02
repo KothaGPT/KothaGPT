@@ -14,17 +14,17 @@ interface WsEnvelope {
 export class KothaGPTWebSocket {
   private socket: WebSocket | null = null;
   private readonly url: string;
-  private readonly apiKey?: string;
 
   constructor(baseURL = "ws://localhost:8000", apiKey?: string) {
-    this.url = `${baseURL.replace(/\/$/, "")}/v1/ws`;
-    this.apiKey = apiKey;
+    // Browsers cannot set custom headers on the handshake, so the API token is
+    // sent as a query parameter (the server also accepts Authorization headers).
+    const base = `${baseURL.replace(/\/$/, "")}/v1/ws`;
+    this.url = apiKey ? `${base}?token=${encodeURIComponent(apiKey)}` : base;
   }
 
   connect(): Promise<KothaGPTWebSocket> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(this.url);
-      if (this.apiKey) socket.onopen = () => {};
       this.socket = socket;
       socket.onopen = () => resolve(this);
       socket.onerror = () => reject(new KothaGPTError("WebSocket connection failed"));
