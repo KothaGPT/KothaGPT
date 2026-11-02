@@ -80,6 +80,12 @@ data-tokenize: | $(VENV)
 		--block-size 4096 \
 		--out data/tokenized
 
+# WS-2: MoE training recipe smoke (Phase B). Exercises the sparse MoE block
+# forward/backward path with the auxiliary load-balancing loss and a lower LR
+# for MoE params.
+moe-smoke: | $(VENV)
+	$(PYTHON) -m ml.models.moe.train
+
 # WS-5: CPU smoke training. Tokenize at the smoke model's context (512) so
 # block size matches max_position_embeddings, then run a short CPU training
 # pass over the tokenized shards via the memmap dataset.
