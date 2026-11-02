@@ -7,6 +7,10 @@ from typing import Any
 
 from ml.inference.registry import get_registry
 
+# Resolve artifact paths against the repository root rather than the process
+# CWD, so the loader works regardless of where it is invoked from.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 _ALLOWED_QUANT_LEVELS = {"none", "int8", "int4", "bf16"}
 
 
@@ -21,7 +25,7 @@ def _model_config_for_record(rec, artifact: Path):
     from ml.models import load_config
     from ml.models.config import ModelConfig
 
-    cfg_path = artifact / "config.json" if artifact.is_dir() else Path("ml/configs/small.yaml")
+    cfg_path = artifact / "config.json" if artifact.is_dir() else _REPO_ROOT / "ml" / "configs" / "small.yaml"
     if cfg_path.is_file():
         try:
             return load_config(cfg_path)
@@ -50,13 +54,19 @@ def load_model(model_id: str = "kothagpt", device: str = "cpu", quant: str = "no
         raise ValueError(f"model {model_id!r} not in registry")
 
     quant_value = _normalize_quant(quant)
-    artifact = Path(rec.artifact_path) if rec.artifact_path else Path(f"ml/pretrain/artifacts/{model_id}")
+    artifact = (
+        Path(rec.artifact_path)
+        if rec.artifact_path
+        else _REPO_ROOT / "ml" / "pretrain" / "artifacts" / model_id
+    )
+    if not artifact.is_absolute():
+        artifact = _REPO_ROOT / artifact
 
     from ml.models import KothaGPT
     from ml.tokenizer import load_tokenizer
 
     cfg = _model_config_for_record(rec, artifact)
-    tok_path = Path("ml/tokenizer/artifacts/best/tokenizer.json")
+    tok_path = _REPO_ROOT / "ml" / "tokenizer" / "artifacts" / "best" / "tokenizer.json"
     if not tok_path.is_file():
         raise FileNotFoundError(f"tokenizer not found: {tok_path}")
     tok = load_tokenizer(tok_path)
