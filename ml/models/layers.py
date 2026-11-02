@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field
-from typing import Optional
-
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 from ml.models.config import ModelConfig
 
@@ -43,17 +39,57 @@ class RMSNorm(nn.Module):
 
 
 class RotaryEmbedding(nn.Module):
-    def __init__(self, dim: int, max_position_embeddings: int = 4096, base: float = 10000.0):
+    def __init__(
+        self,
+        dim: int,
+        max_position_embeddings: int = 4096,
+        base: float = 10000.0,
+        theta: float | None = None,
+        scaling: str | None = None,
+        scaling_factor: float = 1.0,
+    ):
         super().__init__()
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.base = base if theta is None else theta
+        self.scaling = scaling
+        self.scaling_factor = scaling_factor
+        self.inv_freq = self._compute_inv_freq()
+        self._build_cache(max_position_embeddings)
 
-    def forward(self, x: torch.Tensor, seq_len: int, device: str | None = None) -> tuple[torch.Tensor, torch.Tensor]:
-        seq = torch.arange(seq_len, device=device or x.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
+    def _effective_base(self) -> float:
+        base = self.base
+        if self.scaling == "ntk":
+            # NTK-aware scaling: widen frequencies by scaling_factor^(dim/(dim-2)).
+            base = base * self.scaling_factor ** (self.dim / (self.dim - 2))
+        return base
+
+    def _compute_inv_freq(self) -> torch.Tensor:
+        base = self._effective_base()
+        return 1.0 / (base ** (torch.arange(0, self.dim, 2).float() / self.dim))
+
+    def _scaled_positions(self, seq_len: int) -> torch.Tensor:
+        positions = torch.arange(seq_len, dtype=self.inv_freq.dtype)
+        if self.scaling == "linear":
+            positions = positions / self.scaling_factor
+        return positions
+
+    def _build_cache(self, seq_len: int) -> None:
+        positions = self._scaled_positions(seq_len)
+        freqs = torch.outer(positions, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("cos_cached", emb.cos(), persistent=False)
+        self.register_buffer("sin_cached", emb.sin(), persistent=False)
+
+    def forward(
+        self, x: torch.Tensor, seq_len: int | None = None, device: str | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if seq_len is None:
+            seq_len = x.shape[1] if x.dim() >= 2 else x.shape[0]
+        if seq_len <= self.max_position_embeddings:
+            return self.cos_cached[:seq_len], self.sin_cached[:seq_len]
+        positions = self._scaled_positions(seq_len)
+        freqs = torch.outer(positions, self.inv_freq)
         emb = torch.cat((freqs, freqs), dim=-1)
         return emb.cos(), emb.sin()
 
@@ -71,14 +107,18 @@ class Attention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.rotary_emb = RotaryEmbedding(
-            self.head_dim, config.max_position_embeddings, config.rope_theta
+            self.head_dim,
+            config.max_position_embeddings,
+            theta=config.rope_theta,
+            scaling=config.rope_scaling,
+            scaling_factor=config.rope_scaling_factor,
         )
 
     def forward(
         self,
         x: torch.Tensor,
-        cos: Optional[torch.Tensor] = None,
-        sin: Optional[torch.Tensor] = None,
+        cos: torch.Tensor | None = None,
+        sin: torch.Tensor | None = None,
     ) -> torch.Tensor:
         B, T, C = x.shape
         q = self.q_proj(x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
@@ -122,8 +162,8 @@ class TransformerBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        cos: Optional[torch.Tensor] = None,
-        sin: Optional[torch.Tensor] = None,
+        cos: torch.Tensor | None = None,
+        sin: torch.Tensor | None = None,
     ) -> torch.Tensor:
         h = x + self.attention(self.attention_norm(x), cos, sin)
         h = h + self.feed_forward(self.ffn_norm(h))
@@ -147,12 +187,16 @@ class KothaGPT(nn.Module):
         if config.tie_word_embeddings:
             self.lm_head.weight = self.embed_tokens.weight
 
+    @property
+    def rotary_emb(self) -> RotaryEmbedding:
+        return self.layers[0].attention.rotary_emb
+
     def forward(
         self,
         input_ids: torch.Tensor,
-        labels: Optional[torch.Tensor] = None,
+        labels: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
-        B, T = input_ids.shape
+        _, T = input_ids.shape
         hidden = self.embed_tokens(input_ids)
 
         cos, sin = self.layers[0].attention.rotary_emb(hidden, seq_len=T)
@@ -207,3 +251,37 @@ class KothaGPT(nn.Module):
                 if "embed_tokens" not in name
             )
         return sum(p.numel() for p in self.parameters())
+
+    def extend_context_length(
+        self,
+        new_length: int,
+        *,
+        rope_theta: float | None = None,
+        rope_scaling: str | None = None,
+        rope_scaling_factor: float = 1.0,
+    ) -> None:
+        """Extend the model's context window via RoPE scaling.
+
+        Parameter weights are preserved exactly; only the rotary cache and
+        ``config`` are updated. Shrinking or staying the same is rejected.
+        """
+        if new_length <= self.config.max_position_embeddings:
+            raise ValueError(
+                f"new_length {new_length} must exceed current "
+                f"max_position_embeddings {self.config.max_position_embeddings}"
+            )
+        if rope_theta is not None:
+            self.config.rope_theta = rope_theta
+        if rope_scaling is not None:
+            self.config.rope_scaling = rope_scaling
+        if rope_scaling_factor is not None:
+            self.config.rope_scaling_factor = rope_scaling_factor
+        self.config.max_position_embeddings = new_length
+        for layer in self.layers:
+            emb = layer.attention.rotary_emb
+            emb.max_position_embeddings = new_length
+            emb.scaling = self.config.rope_scaling
+            emb.scaling_factor = self.config.rope_scaling_factor
+            emb.base = self.config.rope_theta
+            emb.inv_freq = emb._compute_inv_freq()
+            emb._build_cache(new_length)

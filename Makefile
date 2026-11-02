@@ -342,6 +342,14 @@ eval-reasoning: | $(VENV)
 eval-coding: | $(VENV)
 	$(PYTHON) -m evals.run --suite evals/suites/coding.yaml --split all --out-dir evals/results --name coding
 
+# WS-3: execution-based coding eval (pass@k + syntax validity). Requires a
+# predictions JSONL with record_id + prediction; records carry an optional
+# ``exec`` block with ``code`` and ``expected_stdout``.
+CODING_RECORDS ?= data/benchmarks/sft/v1/sft-code.jsonl
+CODING_PREDICTIONS ?= tests/fixtures/instruction.predictions.json
+eval-coding-exec: | $(VENV)
+	$(PYTHON) -m evals.coding_eval --records $(CODING_RECORDS) --predictions $(CODING_PREDICTIONS) --out evals/results/coding-exec.json
+
 # WS-4: multimodal pipeline eval (vision/audio/document + safety refusal).
 eval-multimodal: | $(VENV)
 	$(PYTHON) -m evals.run --suite evals/suites/multimodal.yaml --split all --out-dir evals/results --name multimodal

@@ -101,5 +101,4 @@ def smoke_train(config: MoETrainingConfig | None = None) -> dict[str, float]:
 
 
 if __name__ == "__main__":
-    metrics = smoke_train()
-    print(metrics)
+    print(smoke_train())

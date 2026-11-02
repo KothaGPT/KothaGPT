@@ -90,10 +90,12 @@ def run_code(
             error=syntax_error,
         )
 
-    sandbox = Sandbox(cpu_sec=cpu_sec, mem_mb=mem_mb, allow_network=allow_network)
+    # The sandbox enforces its CPU budget as the subprocess timeout; pass the
+    # caller's timeout as the budget so a long-running prediction is cut off.
+    sandbox = Sandbox(cpu_sec=timeout_sec, mem_mb=mem_mb, allow_network=allow_network)
     cmd = [sys.executable, "-c", code]
     try:
-        completed = sandbox.run(cmd, timeout=timeout_sec)
+        completed = sandbox.run(cmd)
     except subprocess.TimeoutExpired:
         return CodeResult(
             success=False,

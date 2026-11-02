@@ -1,39 +1,16 @@
-"""Multimodal encoder modules for KothaGPT."""
+"""Multimodal encoders and unified decoder integration."""
 
-from __future__ import annotations
+from ml.models.multimodal.audio import AudioEncoder, AudioProjector
+from ml.models.multimodal.document import DocumentEncoder, DocumentProjector
+from ml.models.multimodal.unified import KothaMultimodal
+from ml.models.multimodal.vision import VisionEncoder, VisionProjector
 
-
-class VisionEncoder:
-    """Frozen ViT-style vision encoder projecting image patches to hidden space."""
-
-    def __init__(self, hidden_size: int, mm_hidden: int = 512):
-        self.hidden_size = hidden_size
-        self.mm_hidden = mm_hidden
-
-    def encode(self, images):
-        """Encode images into hidden-space embeddings."""
-        raise NotImplementedError
-
-
-class AudioEncoder:
-    """Frozen audio encoder projecting audio features to hidden space."""
-
-    def __init__(self, hidden_size: int, mm_hidden: int = 512):
-        self.hidden_size = hidden_size
-        self.mm_hidden = mm_hidden
-
-    def encode(self, audio):
-        """Encode audio into hidden-space embeddings."""
-        raise NotImplementedError
-
-
-class DocumentEncoder:
-    """Document encoder combining OCR text, layout features, and page structure."""
-
-    def __init__(self, hidden_size: int, mm_hidden: int = 512):
-        self.hidden_size = hidden_size
-        self.mm_hidden = mm_hidden
-
-    def encode(self, document):
-        """Encode document into multimodal embeddings."""
-        raise NotImplementedError
+__all__ = [
+    "AudioEncoder",
+    "AudioProjector",
+    "DocumentEncoder",
+    "DocumentProjector",
+    "KothaMultimodal",
+    "VisionEncoder",
+    "VisionProjector",
+]

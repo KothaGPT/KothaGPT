@@ -28,13 +28,18 @@ Guiding principles:
 
 | Area | Exists | Gaps |
 | --- | --- | --- |
-| Model tiering | `small.yaml` (768/12L), `long.yaml` (16k ctx), `smoke.yaml` (192/2/4), SFT configs (128/4L) | no formal tiering taxonomy; no Nano/Medium/Large configs |
-| Registry | `ModelRegistry` with `kothagpt`, `kothagpt-small`, `kothagpt-embed`, `kothagpt-rerank` | no tier fields, no MoE entries, no multimodal entries |
-| Architecture | decoder-only transformer (SwiGLU, RoPE, RMSNorm) | no MoE layer, no multimodal encoder, no reasoning-specific head |
-| Trainer | `ml/trainer/` loop, checkpoint, scheduler, monitor, DDP/FSDP | no tier-aware training, no MoE training recipe |
-| SFT | `ml/sft/` with bn/en/multilingual/code variants | no reasoning/coding-specialist SFT pipeline, no tier-specific SFT |
-| Eval | `evals/` with general, bangla, english, coding, reasoning, math, RAG, agent, hallucination, safety, latency, token-efficiency | no tier-specific eval gates, no adversarial suite, no MoE eval |
-| Inference | `ml/inference/` engine, KV cache, batcher, quant, loader, registry, version | no tier-aware router, no MoE inference engine, no multimodal decoder |
+| Model tiering | `nano.yaml`, `small.yaml`, `medium.yaml`, and `large.yaml`; `ml/models/tier.py` maps all four tiers and defines parameter, context, device, quantization, cost, and latency metadata | tier dimensions and cost/latency values are configuration targets; no trained per-tier artifacts or all-tier model validation are checked in |
+| Registry | `ModelRegistry` seeds nano/small/medium/large and base/embed/rerank records; MoE is marked `research`; optional Postgres persistence is supported | tier defaults are catalog records with `ready` status but empty `artifact_path` and `digest`; the API model list intentionally excludes nano, medium, and large |
+| Architecture | Dense decoder plus prototype MoE layers/router, vision/audio/document encoders and unified wrapper, and an optional reasoning head | these modules are not evidence of production-trained capability; MoE quality/compute comparisons and production multimodal backbones/integration remain open |
+| MoE training | `ml/models/moe/train.py` — `MoETrainer` smoke recipe with separate LR for MoE params and auxiliary load-balancing loss; `make moe-smoke` runs end-to-end | no capacity enforcement, shared-expert fallback, expert-choice routing, or dense-vs-MoE quality/compute comparison at a fixed parameter budget (Phase A) |
+| MoE inference | `ml/inference/moe_engine.py` — `MoEEngine` with `build_routing_table`, `expert_parallel_batch`, and hidden-state `generate`; `ml/inference/expert_parallel.py` — `ExpertParallelBatcher` | smoke only; no production static routing table, device placement, or quantization-friendly MoE integration (Phase C) |
+| Multimodal SFT | `ml/sft/mm_dataset.py` — `MultimodalDataset` + `load_mm_records` grouping by image/audio/document/text | no pretrained/frozen CLIP or Whisper backbones; no modality-aware generation; no multimodal benchmark targets |
+| Trainer | `ml/trainer/` loop, checkpoint, scheduler, monitor, DDP/FSDP; `ml/models/moe/train.py` — `MoETrainer` smoke recipe with separate LR for MoE params and auxiliary load-balancing loss (`make moe-smoke`) | no tier-aware training; MoE recipe is smoke-only (no capacity enforcement, shared-expert fallback, or expert-choice routing) |
+| SFT | `ml/sft/` with bn/en/multilingual/code variants; `ml/sft/reasoning.py` and `ml/sft/coding.py` specialist dataset loaders with family annotation (math/logic/multihop/commonsense; function_synthesis/bug_fix/explanation/bangla_comment); `ml/tokenizer/coding.py` additive coding special-token extensions; `evals/suites/reasoning.yaml`, `evals/suites/coding.yaml`, `evals/suites/multimodal.yaml` | no tier-specific SFT |
+| Eval | `evals/` includes general and task suites, four tier suites, `evals/tier_gate.py`, and an adversarial suite; `evals/coding_eval.py` — execution-based pass@k + syntax-validity scoring over `services.agents.tools.code.run_code` (`make eval-coding-exec`, CI step); `data/benchmarks/sft/v1/sft-code.jsonl` carries `exec` test-harness fixtures | checked-in tier gate tests use gold responses with `MockTarget`; no model-backed per-tier baseline or MoE evaluation evidence is checked in |
+| Inference | `ml/inference/` engine, KV cache, batcher, quantization, loader, registry, and a `ModelRouter` task-class mapping with a static escalation chain | the router is wired into the API (`services/api/router.py` + `services/api/api/routers/chat.py`) via the `X-Kotha-Tier` header (`auto`/`nano`/`small`/`medium`/`large`); it loads `ml/inference/router_config.yaml` and escalates when measured quality is below the floor; no MoE inference engine |
+
+Status evidence: `tests/test_model_loader.py` covers the `kothagpt-small` loader alias, and `tests/test_api.py` covers runtime model-ID and API model-list contracts. `tests/test_tier_gate.py` exercises tier suites and gate behavior with mock/gold responses, not trained tier checkpoints. There are no direct tests for `ModelRouter` or the tier defaults in `ModelRegistry`; configuration, routing, and registry entries therefore describe implemented scaffolding, not verified production capability.
 
 ---
 
@@ -385,25 +390,22 @@ WS-6 (eval) gates all other workstreams and is the last to ship each tier.
 
 ```bash
 # Tier configs
-python -m pytest tests/test_model_tier.py        # WS-1
-python -m pytest tests/test_tier_configs.py       # WS-1
-make config-validate                                # validate all tier configs
+python -m pytest tests/test_model_tier.py tests/test_tier_configs.py   # WS-1
+make config-validate                                                # validate all tier configs
 
 # MoE
-python -m pytest tests/test_moe_layer.py          # WS-2
-python -m pytest tests/test_moe_router.py         # WS-2
-make moe-smoke                                    # WS-2 training smoke
+python -m pytest tests/test_moe_layer.py tests/test_moe_router.py tests/test_moe_train.py tests/test_moe_engine.py  # WS-2
+make moe-smoke                                                    # WS-2 training smoke
 
 # Reasoning / Coding
-python -m pytest tests/test_reasoning_head.py     # WS-3
-python -m pytest tests/test_coding_tokens.py      # WS-3
-make eval-reasoning                               # WS-3 eval
-make eval-coding                                  # WS-3 eval
+python -m pytest tests/test_reasoning_head.py tests/test_coding_tokens.py tests/test_coding_eval.py  # WS-3
+make eval-reasoning                                               # WS-3 eval
+make eval-coding                                                  # WS-3 eval
+make eval-coding-exec                                             # WS-3 execution-based pass@k
 
 # Multimodal
-python -m pytest tests/test_vision_encoder.py     # WS-4
-python -m pytest tests/test_audio_encoder.py      # WS-4
-make eval-multimodal                              # WS-4 eval
+python -m pytest tests/test_vision_encoder.py tests/test_audio_encoder.py tests/test_mm_dataset.py  # WS-4
+make eval-multimodal                                              # WS-4 eval
 
 # Routing
 python -m pytest tests/test_model_router.py       # WS-5

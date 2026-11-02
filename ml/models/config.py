@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -19,9 +18,19 @@ class ModelConfig:
     max_position_embeddings: int = 4096
     rms_norm_eps: float = 1e-5
     rope_theta: float = 10000.0
+    rope_scaling: str | None = None
+    rope_scaling_factor: float = 1.0
     tie_word_embeddings: bool = True
     norm_type: str = "rmsnorm"
     architecture: str = "decoder_transformer"
+    mm_hidden: int = 0
+    vision_encoder: bool = False
+    audio_encoder: bool = False
+    document_encoder: bool = False
+    # WS-3 reasoning head: optional auxiliary supervision during training.
+    reasoning_head: bool = False
+    # WS-3 coding token extensions: additive coding special tokens.
+    coding_extensions: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -32,6 +41,16 @@ class ModelConfig:
         return int(8 / 3 * self.hidden_size)
 
     def validate(self) -> None:
+        # Coerce numeric strings (e.g. from YAML round-trips where ``1e-5`` is
+        # parsed as the string ``"1e-5"``) so downstream code never sees a
+        # ``str`` where a ``float`` is expected.
+        for field_name in ("rms_norm_eps", "rope_theta", "rope_scaling_factor"):
+            value = getattr(self, field_name)
+            if isinstance(value, str):
+                try:
+                    setattr(self, field_name, float(value))
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"{field_name} must be a number, got {value!r}") from exc
         if self.hidden_size <= 0:
             raise ValueError("hidden_size must be positive")
         if self.num_layers <= 0:
@@ -44,12 +63,20 @@ class ModelConfig:
             )
         if self.vocab_size <= 0:
             raise ValueError("vocab_size must be positive")
+        if self.mm_hidden < 0:
+            raise ValueError("mm_hidden must be non-negative")
         if self.max_position_embeddings <= 0:
             raise ValueError("max_position_embeddings must be positive")
         if self.norm_type not in ("rmsnorm", "layernorm"):
             raise ValueError(f"norm_type {self.norm_type} not supported")
         if self.architecture != "decoder_transformer":
             raise ValueError(f"architecture {self.architecture} not supported")
+        if self.rope_theta <= 0:
+            raise ValueError("rope_theta must be positive")
+        if self.rope_scaling is not None and self.rope_scaling not in ("linear", "ntk"):
+            raise ValueError(f"rope_scaling {self.rope_scaling} not supported")
+        if self.rope_scaling is not None and self.rope_scaling_factor <= 1.0:
+            raise ValueError("rope_scaling_factor must be > 1.0 when rope_scaling is set")
 
 
 @dataclass
@@ -87,6 +114,26 @@ class TrainingConfig:
             raise ValueError("max_steps must be positive")
         if self.mixed_precision not in ("none", "bf16", "fp16"):
             raise ValueError(f"mixed_precision {self.mixed_precision} not supported")
+        if self.min_lr is not None:
+            # Coerce numeric strings (e.g. from YAML round-trips) so validation
+            # never crashes on a type mismatch between a str and an int.
+            if isinstance(self.min_lr, str):
+                try:
+                    self.min_lr = float(self.min_lr)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"min_lr must be a number, got {self.min_lr!r}") from exc
+            if isinstance(self.min_lr, bool) or not isinstance(self.min_lr, (int, float)):
+                raise ValueError(f"min_lr must be a number, got {type(self.min_lr).__name__}")
+            if self.min_lr < 0:
+                raise ValueError("min_lr must be non-negative")
+            if self.min_lr >= self.learning_rate:
+                raise ValueError("min_lr must be below learning_rate")
+        if self.lr_schedule not in ("cosine", "linear"):
+            raise ValueError(f"lr_schedule {self.lr_schedule} not supported")
+        if self.warmup_steps < 0:
+            raise ValueError("warmup_steps must be non-negative")
+        if self.warmup_steps > self.max_steps:
+            raise ValueError("warmup_steps must not exceed max_steps")
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -137,7 +184,6 @@ def model_digest(cfg: BaseModelConfig | ModelConfig | dict) -> str:
 
 def load_config(path: str | Path) -> BaseModelConfig:
     from ml.tokenizer import load_tokenizer
-    from ml.tokenizer.base import BaseTokenizer
 
     path = Path(path)
     with open(path, "r") as f:
@@ -154,18 +200,24 @@ def load_config(path: str | Path) -> BaseModelConfig:
         try:
             tokenizer = load_tokenizer(tokenizer_path)
             model_data["vocab_size"] = len(tokenizer.vocab)
-        except Exception:
+        except Exception:  # noqa: BLE001
             try:
                 tok_data = json.loads(Path(tokenizer_path).read_text(encoding="utf-8"))
                 if "vocab" in tok_data and isinstance(tok_data["vocab"], dict):
                     model_data["vocab_size"] = len(tok_data["vocab"])
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
 
+    # Filter unknown keys so config files can carry extra metadata (e.g. the
+    # ``tier`` block in ml/configs/*.yaml, ``task_type`` / ``base_model`` in
+    # SFT configs) without breaking the dataclass contract.
+    model_fields = {f for f in ModelConfig.__dataclass_fields__}
+    training_fields = {f for f in TrainingConfig.__dataclass_fields__}
+    data_fields = {f for f in DataConfig.__dataclass_fields__}
     cfg = BaseModelConfig(
-        model=ModelConfig(**model_data),
-        training=TrainingConfig(**training_data),
-        data=DataConfig(**data_data),
+        model=ModelConfig(**{k: v for k, v in model_data.items() if k in model_fields}),
+        training=TrainingConfig(**{k: v for k, v in training_data.items() if k in training_fields}),
+        data=DataConfig(**{k: v for k, v in data_data.items() if k in data_fields}),
     )
     cfg.validate()
     return cfg

@@ -106,24 +106,42 @@ _FAMILIES: dict[str, list[dict[str, Any]]] = {
             "output": "def add(a, b):\n    return a + b",
             "language": "en",
             "category": "coding",
+            # ``code`` is the *test harness* — it assumes the predicted function
+            # is already defined. The scorer prepends the model's prediction.
+            "exec": {
+                "code": "print(add(2, 3))",
+                "expected_stdout": "5",
+            },
         },
         {
             "instruction": "Write a Python function `is_even(n)` that returns True when n is even.",
             "output": "def is_even(n):\n    return n % 2 == 0",
             "language": "en",
             "category": "coding",
+            "exec": {
+                "code": "print(is_even(4))",
+                "expected_stdout": "True",
+            },
         },
         {
             "instruction": "Write a Python function `square(n)` that returns the square of n.",
             "output": "def square(n):\n    return n * n",
             "language": "en",
             "category": "coding",
+            "exec": {
+                "code": "print(square(5))",
+                "expected_stdout": "25",
+            },
         },
         {
             "instruction": "Write a Python function `first(items)` that returns the first item, or None for an empty list.",
             "output": "def first(items):\n    return items[0] if items else None",
             "language": "en",
             "category": "coding",
+            "exec": {
+                "code": "print(first([7, 8]))",
+                "expected_stdout": "7",
+            },
         },
     ],
     "sft-reasoning": [
