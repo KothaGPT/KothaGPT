@@ -160,14 +160,127 @@ class BackendProtocol(Protocol):
     def invoke_tool(self, name: str, arguments: dict[str, Any]) -> ToolInvokeResponse: ...
 
 
+@dataclass(frozen=True)
+class ModelConfig:
+    """Shared model configuration used across services and SDKs."""
+
+    vocab_size: int
+    hidden_size: int
+    num_layers: int
+    num_heads: int
+    intermediate_size: int | None = None
+    max_position_embeddings: int = 2048
+    rms_norm_eps: float = 1e-5
+    rope_theta: float = 10000.0
+    tie_word_embeddings: bool = False
+    quant: str = "none"
+    device: str = "cpu"
+
+    def __post_init__(self) -> None:
+        if self.intermediate_size is None:
+            object.__setattr__(self, "intermediate_size", 4 * self.hidden_size)
+
+
+@dataclass(frozen=True)
+class AgentConfig:
+    """Shared agent configuration describing tools, memory, and limits."""
+
+    name: str
+    model: str = "kothagpt"
+    instructions: str | None = None
+    tools: list[str] = field(default_factory=list)
+    memory_enabled: bool = True
+    max_tokens_per_run: int = 4096
+    max_runs_per_minute: int = 60
+    temperature: float | None = 0.7
+
+
+@dataclass(frozen=True)
+class BackendConfig:
+    """Shared backend configuration."""
+
+    name: str
+    kind: str = "example"
+    status: str = "not_configured"
+    production: bool = False
+    capabilities: dict[str, bool] | None = None
+    notes: str = ""
+
+
+@dataclass(frozen=True)
+class APIError:
+    """Shared error shape surfaced across API and SDKs."""
+
+    error: str
+    message: str | None = None
+    code: str | None = None
+    details: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class Pagination:
+    """Shared pagination parameters."""
+
+    page: int = 1
+    page_size: int = 20
+
+
+@dataclass(frozen=True)
+class PaginatedResponse:
+    """Shared paginated response envelope."""
+
+    items: list[Any] = field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+
+    @property
+    def has_more(self) -> bool:
+        return self.page * self.page_size < self.total
+
+
+@dataclass(frozen=True)
+class EvaluationResult:
+    """Shared evaluation run result."""
+
+    run_id: str
+    name: str
+    model: str
+    benchmark: str
+    status: str
+    scores: dict[str, float] = field(default_factory=dict)
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+@dataclass(frozen=True)
+class DatasetRef:
+    """Shared dataset reference."""
+
+    id: str
+    name: str
+    version: str = "1.0.0"
+    status: str = "ready"
+    records: int = 0
+    languages: list[str] = field(default_factory=list)
+
+
 __all__ = [
+    "APIError",
+    "AgentConfig",
+    "BackendConfig",
     "BackendProtocol",
     "ChatMessage",
     "ChatRequest",
     "ChatResponse",
+    "DatasetRef",
     "Embedding",
     "EmbeddingResponse",
+    "EvaluationResult",
+    "ModelConfig",
     "ModelRef",
+    "PaginatedResponse",
+    "Pagination",
     "RerankResponse",
     "RerankResult",
     "RuntimeContract",

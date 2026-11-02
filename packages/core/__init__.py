@@ -5,13 +5,21 @@ SDKs. Import from ``kothagpt.core.types`` (or re-exported names here).
 """
 
 from .types import (
+    AgentConfig,
+    APIError,
+    BackendConfig,
     BackendProtocol,
     ChatMessage,
     ChatRequest,
     ChatResponse,
+    DatasetRef,
     Embedding,
     EmbeddingResponse,
+    EvaluationResult,
+    ModelConfig,
     ModelRef,
+    PaginatedResponse,
+    Pagination,
     RerankResponse,
     RerankResult,
     RuntimeContract,
@@ -24,13 +32,21 @@ from .types import (
 )
 
 __all__ = [
+    "APIError",
+    "AgentConfig",
+    "BackendConfig",
     "BackendProtocol",
     "ChatMessage",
     "ChatRequest",
     "ChatResponse",
+    "DatasetRef",
     "Embedding",
     "EmbeddingResponse",
+    "EvaluationResult",
+    "ModelConfig",
     "ModelRef",
+    "PaginatedResponse",
+    "Pagination",
     "RerankResponse",
     "RerankResult",
     "RuntimeContract",
